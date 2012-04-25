@@ -50,8 +50,6 @@ void udf_validate_tag_and_crc_sums(void *blob);
 int udf_tagsize(union dscrptr *dscr, uint32_t udf_sector_size);
 
 /* read/write descriptors */
-int udf_read_phys_sectors(struct udf_mount *ump, int what, void *blob,
-	uint32_t start, uint32_t sectors);
 //int udf_write_phys_sectors(struct udf_mount *ump, int what, void *blob,
 //	uint32_t start, uint32_t sectors);
 int udf_read_phys_dscr(
@@ -122,7 +120,7 @@ int udf_get_record_vpart(struct udf_mount *ump, int udf_c_type);
 //void udf_late_allocate_buf(struct udf_mount *ump, struct buf *buf, uint64_t *lmapping, struct long_ad *node_ad_cpy, uint16_t *vpart_num);
 //int udf_grow_node(struct udf_node *node, uint64_t new_size);
 //int udf_shrink_node(struct udf_node *node, uint64_t new_size);
-//void udf_calc_freespace(struct udf_mount *ump, uint64_t *sizeblks, uint64_t *freeblks);
+void udf_calc_freespace(struct udf_mount *ump, uint64_t *sizeblks, uint64_t *freeblks);
 
 /* node readers and writers */
 //uint64_t udf_advance_uniqueid(struct udf_mount *ump);

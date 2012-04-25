@@ -10,15 +10,6 @@
 #endif
 #include <sys/ioccom.h>
 
-/*
-struct ioc_play_blocks {
-	int	blk;
-	int	len;
-};
-#define	CDIOCPLAYBLOCKS	_IOW('c',2,struct ioc_play_blocks)
-
-#define	UDFIOTEST	_IO('c',300)
-*/
 
 struct udf_session_info {
 	uint32_t session_num;
@@ -33,6 +24,6 @@ struct udf_session_info {
 	uint16_t session_first_track;
 	uint16_t session_last_track;
 };
-#define	UDFIOTEST	_IO('c',300)
+#define	UDFIOTEST	_IOWR('c',300, struct udf_session_info)
 
 #endif /* !_SYS_UDFIO_H_ */

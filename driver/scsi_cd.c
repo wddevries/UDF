@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD: src/sys/cam/scsi/scsi_cd.c,v 1.130 2011/11/07 15:43:11 ed Exp $");
+__FBSDID("$FreeBSD$");
 
 #include "opt_cd.h"
 
@@ -284,10 +284,22 @@ static	int		cdsendkey(struct cam_periph *periph,
 				  struct dvd_authinfo *authinfo);
 static	int		cdreaddvdstructure(struct cam_periph *periph,
 					   struct dvd_struct *dvdstruct);
+
+/* added for UDF */
+static int udfreaddiscinfo(struct cam_periph *periph, struct udf_session_info *usi);
 static	int 		cdgetconf(struct cam_periph *periph, u_int8_t *data,
-				  u_int32_t len, uint8_t rt, uint16_t startfeature, u_int32_t sense_flags);
+				  u_int32_t len, uint8_t rt, 
+				  uint16_t startfeature, u_int32_t sense_flags);
 static 	int		cdreaddiscinfo(struct cam_periph *periph, uint8_t *data,
 				       uint32_t len, uint32_t sense_flags);
+static 	int 		cdreadtrackinfo(struct cam_periph *periph, 
+					uint8_t *data, uint32_t len, 
+					uint32_t trackno, 
+					uint32_t sense_flags);
+static	int		cdrecordedsequentially(struct cam_periph *periph,
+					       int *sequentual_media,
+					       int *link_block_penalty);
+/* end of UDF */
 
 static struct periph_driver cddriver =
 {
@@ -1488,6 +1500,14 @@ cdstart(struct cam_periph *periph, union ccb *start_ccb)
 					/* dxfer_len */ bp->bio_bcount,
 					/* sense_len */ SSD_FULL_SIZE,
 					/* timeout */ 30000);
+			/* Use READ CD command for audio tracks. */
+			if (softc->params.blksize == 2352) {
+				start_ccb->csio.cdb_io.cdb_bytes[0] = READ_CD;
+				start_ccb->csio.cdb_io.cdb_bytes[9] = 0xf8;
+				start_ccb->csio.cdb_io.cdb_bytes[10] = 0;
+				start_ccb->csio.cdb_io.cdb_bytes[11] = 0;
+				start_ccb->csio.cdb_len = 12;
+			}
 			start_ccb->ccb_h.ccb_state = CD_CCB_BUFFER_IO;
 
 			
@@ -1844,8 +1864,6 @@ cdgetpagesize(int page_num)
 
 	return (-1);
 }
-
-static void havingfunwithudf(struct 	cam_periph *periph);
 
 static int
 cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
@@ -2684,6 +2702,16 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
 		error = cdsetspeed(periph, CDR_MAX_SPEED, *(u_int32_t *)addr);
 		cam_periph_unlock(periph);
 		break;
+	case CDRIOCGETBLOCKSIZE:
+		*(int *)addr = softc->params.blksize;
+		break;
+	case CDRIOCSETBLOCKSIZE:
+		if (*(int *)addr <= 0) {
+			error = EINVAL;
+			break;
+		}
+		softc->disk->d_sectorsize = softc->params.blksize = *(int *)addr;
+		break;
 	case DVDIOCSENDKEY:
 	case DVDIOCREPORTKEY: {
 		struct dvd_authinfo *authinfo;
@@ -2705,14 +2733,18 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
 
 		break;
 	}
-	case UDFIOTEST:
-		{
-			CAM_DEBUG(periph->path, CAM_DEBUG_SUBTRACE, 
-				  ("trying to do UDFIOTEST\n"));
-			
-			havingfunwithudf(periph);
-		}
+	case UDFIOTEST: {
+		struct udf_session_info  *usi;
+
+		usi = (struct udf_session_info *)addr;
+
+		CAM_DEBUG(periph->path, CAM_DEBUG_SUBTRACE, 
+			  ("trying to do UDFIOTEST\n"));
+		
+		udfreaddiscinfo(periph, usi);
+
 		break;
+		}
 	default:
 		cam_periph_lock(periph);
 		error = cam_periph_ioctl(periph, cmd, addr, cderror);
@@ -2732,10 +2764,7 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
 	return (error);
 }
 
-
-static int cdreadtrackinfo(struct cam_periph *periph, uint8_t *data, uint32_t len, 
-	       uint32_t trackno, uint32_t sense_flags);
-
+/* Added for UDF. */
 static int
 cdrecordedsequentially(struct cam_periph *periph, int *sequentual_media,
     int *link_block_penalty) 
@@ -2794,6 +2823,7 @@ printf("feature_code: %x, additional_len: %d, current %d, seqfeature: %d, cancel
 		databuflen -= 4 + fg->additional_len;
 		
 		if (databuflen < 4) {
+printf("cdgetconf again, sizeof gch+16: %ld\n", sizeof(*gch)+16);
 			error = cdgetconf(periph, (u_int8_t *)gch, sizeof (*gch) + 16,
 				GC_RT_ALLFEATURES, featcode + 1, /*sense_flags*/SF_NO_PRINT);
 			if (error)
@@ -2819,7 +2849,7 @@ out:
 }
 
 static int
-funwithreaddiscinfo(struct cam_periph *periph, struct udf_session_info /*{
+udfreaddiscinfo(struct cam_periph *periph, struct udf_session_info /*{
 	uint32_t session_num;
 
 	uint16_t sector_size;
@@ -2831,7 +2861,7 @@ funwithreaddiscinfo(struct cam_periph *periph, struct udf_session_info /*{
 	uint8_t  first_track;
 	uint16_t session_first_track;
 	uint16_t session_last_track;
-}*/)
+}*/ *usi)
 {
 	struct scsi_read_disc_info_data *rdi;
 	struct scsi_read_track_info_data *ti;
@@ -2847,7 +2877,7 @@ funwithreaddiscinfo(struct cam_periph *periph, struct udf_session_info /*{
 
 	rdi = malloc(sizeof(struct scsi_read_disc_info_data),
 		M_SCSICD, M_WAITOK | M_ZERO);
-	ti = malloc(sizeof(struct scsi_read_track_info),
+	ti = malloc(sizeof(struct scsi_read_track_info_data),
 		M_SCSICD, M_WAITOK | M_ZERO);
 
 	cam_periph_lock(periph);
@@ -2857,21 +2887,23 @@ funwithreaddiscinfo(struct cam_periph *periph, struct udf_session_info /*{
 	if (error != 0)
 		goto out;
 
-	num_sessions = rdi->num_sessions_lsb | (rdi->num_sessions_msb << 8);
-	if (session_num == 0)
-		session_num = num_sessions;
-	first_track = rdi->num_first_track;
+	usi->num_sessions = rdi->num_sessions_lsb | (rdi->num_sessions_msb << 8);
+printf("num_sessions: %d, session_num: %d\n", usi->num_sessions, usi->session_num);
+	if (usi->session_num == 0)
+		usi->session_num = usi->num_sessions;
+
+	usi->first_track = rdi->num_first_track;
 
 	lsb = rdi->last_track_last_session_lsb;
 	msb = rdi->last_track_last_session_msb;
-	num_tracks = ((msb << 8) | lsb) - first_track + 1;
+	usi->num_tracks = ((msb << 8) | lsb) - usi->first_track + 1;
 
 printf("last_track_last_session: %u\n", (rdi->last_track_last_session_msb << 8) | rdi->last_track_last_session_lsb);
 printf("first_track_last_session: %u\n", (rdi->first_track_last_session_msb << 8) | rdi->first_track_last_session_lsb);
 
-	session_first_track = 0;
-	session_last_track = 0;
-	session_start_addr = 0;
+	usi->session_first_track = 0;
+	usi->session_last_track = 0;
+	usi->session_start_addr = 0;
 	track_start_addr = 0;
 	track_size = 0;
 	free_blocks = 0;
@@ -2879,20 +2911,21 @@ printf("first_track_last_session: %u\n", (rdi->first_track_last_session_msb << 8
 	lra = 0;
 	lra_valid = 0;
 	nwa_valid = 0;
-	for (track = first_track; track <= num_tracks; track++) {
+	for (track = usi->first_track; track <= usi->num_tracks; track++) {
 		error = cdreadtrackinfo(periph, (uint8_t *)ti, sizeof(*ti), 
 	       			track, /*sense_flags*/SF_NO_PRINT);
-		if (error != 0)
+		if (error != 0) {
+printf("Damn an error!\n");
 			goto out;
-
+		}
 		sessret = (ti->session_num_msb << 8) | ti->session_num_lsb;
-printf("Trackno: %u, Session No: %u, actual track: %u\n", (ti->track_num_msb << 8) | ti->track_num_lsb, sessret, track);
-		if (sessret == session_num) {
-			if (session_first_track == 0) {
-				session_first_track = track;
-				session_start_addr = scsi_4btoul(ti->track_start_addr);
+printf("Trackno: %u, sessret: %u, actual track: %u\n", (ti->track_num_msb << 8) | ti->track_num_lsb, sessret, track);
+		if (sessret == usi->session_num) {
+			if (usi->session_first_track == 0) {
+				usi->session_first_track = track;
+				usi->session_start_addr = scsi_4btoul(ti->track_start_addr);
 			}
-			session_last_track = track;
+			usi->session_last_track = track;
 			track_start_addr = scsi_4btoul(ti->track_start_addr);
 			track_size = scsi_4btoul(ti->track_size);
 			free_blocks = scsi_4btoul(ti->free_blocks);
@@ -2901,37 +2934,38 @@ printf("Trackno: %u, Session No: %u, actual track: %u\n", (ti->track_num_msb << 
 			nwa_valid = ti->valid_data & READ_TRACK_INFO_NWA_V;
 			nwa =  scsi_4btoul(ti->next_writable_addr);
 		} 
-		else if (session_first_track != 0)
+		else if (usi->session_first_track != 0)
 			break;
 	}
 	
-	if (session_first_track == 0 || session_last_track == 0) {
+	if (usi->session_first_track == 0 || usi->session_last_track == 0) {
+printf("Session not found\n");
 		error = EINVAL;
 		goto out;
 	}
 
 	/* Calculate end address of session. */
-	session_end_addr = track_start_addr + track_size - free_blocks - 1;
+	usi->session_end_addr = track_start_addr + track_size - free_blocks - 1;
 printf("last address: %d, track_start_addr: %u, track_size: %u, free_blocks: %u\n", 
-		session_end_addr, track_start_addr, track_size, free_blocks);
+		usi->session_end_addr, track_start_addr, track_size, free_blocks);
 	if (seqmedia == 1) {
 printf("last_rec_valid: %d, last_recorded_addr: %u, next_writ_valid: %d, next_writable_addr: %u, linkblkpenalty: %u\n",
-	last_rec_valid, last_recorded_addr, next_writ_valid, next_writable_addr, linkblkpenalty);
-		if (last_rec_valid != 0)
-			session_end_addr = last_recorded_addr;
+	lra_valid, lra, nwa_valid, nwa, linkblkpenalty);
+		if (lra_valid != 0)
+			usi->session_end_addr = lra;
 		/*else if (next_writ_valid != 0)
 			session_end_addr = next_writable_addr - linkblkpenalty;*/
 	}
 
-	sector_size = 2048;
+	usi->sector_size = 2048;
 	/* print the data */
-	printf("data from session number %d\n", session_num);
-	printf("sector_size: %u\n", sector_size); /* not sure the value can be anything different with cds or dvds */
-	printf("num_tracks: %u\n", num_tracks);
-	printf("num_sessions: %u\n", num_sessions);
-	printf("first_track: %u\n", first_track);
-	printf("session first track: %u, last track %u\n", session_first_track, session_last_track);
-	printf("session first address: %d, last address: %d\n", session_start_addr, session_end_addr);
+	printf("data from session number %d\n", usi->session_num);
+	printf("sector_size: %u\n", usi->sector_size); /* not sure the value can be anything different with cds or dvds */
+	printf("num_tracks: %u\n", usi->num_tracks);
+	printf("num_sessions: %u\n", usi->num_sessions);
+	printf("first_track: %u\n", usi->first_track);
+	printf("session first track: %u, last track %u\n", usi->session_first_track, usi->session_last_track);
+	printf("session first address: %d, last address: %d\n", usi->session_start_addr, usi->session_end_addr);
 out:
 	cam_periph_unlock(periph);
 	free(rdi, M_SCSICD);
@@ -3019,12 +3053,6 @@ funwithgetconf(struct cam_periph *periph)
 	free(gch, M_SCSICD);
 }
 #endif
-static void 
-havingfunwithudf(struct cam_periph *periph) 
-{
-	funwithreaddiscinfo(periph, 0);
-	//funwithgetconf(periph);
-}
 
 static int 
 cdgetconf(struct cam_periph *periph, uint8_t *data, uint32_t len,
@@ -3075,6 +3103,7 @@ cdreaddiscinfo(struct cam_periph *periph, uint8_t *data, uint32_t len,
 	union ccb *ccb;
 	int error;
 
+printf("data ptr: %p, len %d, sense_flags: %u\n", data, len, sense_flags);
 	error = 0;
 
 	ccb = cdgetccb(periph, CAM_PRIORITY_NORMAL);
@@ -3113,6 +3142,7 @@ cdreadtrackinfo(struct cam_periph *periph, uint8_t *data, uint32_t len,
 	union ccb *ccb;
 	int error;
 
+printf("data ptr: %p, len %d, trackno: %u, sense_flags: %u\n", data, len, trackno, sense_flags);
 	error = 0;
 
 	ccb = cdgetccb(periph, CAM_PRIORITY_NORMAL);
@@ -3143,7 +3173,7 @@ cdreadtrackinfo(struct cam_periph *periph, uint8_t *data, uint32_t len,
 
 	return error;
 }
-
+/* End of UDF code. */
 
 static void
 cdprevent(struct cam_periph *periph, int action)
@@ -3307,6 +3337,13 @@ cdcheckmedia(struct cam_periph *periph)
 	}
 
 	softc->flags |= CD_FLAG_VALID_TOC;
+
+	/* If the first track is audio, correct sector size. */
+	if ((softc->toc.entries[0].control & 4) == 0) {
+		softc->disk->d_sectorsize = softc->params.blksize = 2352;
+		softc->disk->d_mediasize =
+		    (off_t)softc->params.blksize * softc->params.disksize;
+	}
 
 bailout:
 
@@ -4676,3 +4713,4 @@ scsi_read_dvd_structure(struct ccb_scsiio *csio, u_int32_t retries,
 		      sizeof(*scsi_cmd),
 		      timeout);
 }
+

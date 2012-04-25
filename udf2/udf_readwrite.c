@@ -37,9 +37,11 @@
 #include "udf_subr.h"
 
 
+static int udf_read_phys_sectors(struct udf_mount *ump, int what, void *blob,
+	uint32_t start, uint32_t sectors);
 /* --------------------------------------------------------------------- */
 
-#if 0 //write only
+#if 0
 void
 udf_fixup_fid_block(uint8_t *blob, int lb_size,
 	int rfix_pos, int max_rfix_pos, uint32_t lb_num)
@@ -252,7 +254,6 @@ udf_fixup_node_internals(struct udf_mount *ump, uint8_t *blob, int udf_c_type)
 int
 udf_read_node(struct udf_node *unode, uint8_t *blob, off_t start, int length)
 {
-printf("%s: start: %lu, length: %d\n",__func__, start, length);
 	struct vnode *devvp = unode->ump->devvp;
 	struct buf *bp; /* *buf, *nestbuf, ; */
 	uint64_t file_size, lsect;
@@ -276,38 +277,28 @@ printf("%s: start: %lu, length: %d\n",__func__, start, length);
 	length = min(file_size - start, length);
 	fileblk = start / sector_size;
 	fileblkoff = start % sector_size;
-printf("start: %lu, length: %d, fileblk: %u\n, fileblkoff: %u\n", start, length, fileblk, fileblkoff);
 
 	addr_type = icbflags & UDF_ICB_TAG_FLAGS_ALLOC_MASK;
 	if (addr_type == UDF_ICB_INTERN_ALLOC) {
-printf("udf_read_node: internal\n");
 		numb = min(length, file_size - fileblkoff);
-printf("udf_read_node: numb = %u\n", numb);
 		memcpy(blob, pos + fileblkoff, numb);
 		return error;
 	}
 
 	while (length) {
-//udf_bmap_translate(struct udf_node *udf_node, uint32_t block, 
-//		   uint64_t *lsector, uint32_t *maxblks)
 		error = udf_bmap_translate(unode, fileblk, &lsect, &numlsect);
 		if (error)
 			return error;
 
 		if (lsect == UDF_TRANS_ZERO) {
-printf("udf_read_node: zeros\n");
 			numb = min(length, sector_size * numlsect - fileblkoff);
 			memset(blob, 0, numb);
 			length -= numb;
 			blob += numb;
 			fileblkoff = 0;
 		} else if (lsect == UDF_TRANS_INTERN) {
-printf("udf_read_node: oh no\n");
-			//numb = min(length, sector_size * numlsect - fileblkoff);
-			//memcpy(blob, pos, inflen);
 			return EDOOFUS;
 		} else {
-printf("udf_read_node: not zeros\n");
 			while (numlsect > 0) {
 				if ((error = bread(devvp, lsect*blkinsect, sector_size, NOCRED,
 				   		&bp)) != 0) {
@@ -315,13 +306,11 @@ printf("udf_read_node: not zeros\n");
 						brelse(bp);
 					return error;
 				}
-printf("udf_read_node: bread ran\n");
 		
 				numb = min(length, sector_size - fileblkoff);
 				bcopy(bp->b_data + fileblkoff, blob, numb);
 				brelse(bp);
 				bp = NULL;
-printf("udf_read_node: after copy\n");
 		
 				blob += numb;
 				length -= numb;
@@ -337,14 +326,14 @@ printf("udf_read_node: after copy\n");
 }
 
 /* SYNC reading of n blocks from specified sector */
-int
+static int
 udf_read_phys_sectors(struct udf_mount *ump, int what, void *blob,
 	uint32_t start, uint32_t sectors)
 {
 	struct buf *bp; /* *buf, *nestbuf, ; */
-	int error = 0; // piece;
-	//off_t lblkno, rblkno;
-	uint32_t sector_size, blks; // buf_offset;
+	int error = 0; /* piece; */
+	/* off_t lblkno, rblkno; */
+	uint32_t sector_size, blks; /* buf_offset; */
 	struct vnode *devvp = ump->devvp;
 
 	sector_size = ump->sector_size;
@@ -490,7 +479,7 @@ udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
 }
 
 
-#if 0 //write only
+#if 0
 static void
 udf_write_phys_buf(struct udf_mount *ump, int what, struct buf *buf)
 {
@@ -651,7 +640,7 @@ udf_write_phys_dscr_async(struct udf_mount *ump, struct udf_node *udf_node,
 	/* get transfer buffer */
 	vp = udf_node ? udf_node->vnode : ump->devvp;
 	buf = getiobuf(vp, true);
-	buf->b_flags    = B_WRITE; // | B_ASYNC;
+	buf->b_flags    = B_WRITE | B_ASYNC;
 	buf->b_cflags   = BC_BUSY;
 	buf->b_iodone	= dscrwr_callback;
 	buf->b_data     = dscr;

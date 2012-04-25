@@ -219,7 +219,7 @@ udf_node_sanity_check(struct udf_node *udf_node,
 	int dscr_size, lb_size, flags, whole_lb;
 	int i, slot, eof;
 
-//	KASSERT(mutex_owned(&udf_node->ump->allocate_mutex));
+	KASSERT(mutex_owned(&udf_node->ump->allocate_mutex));
 
 	if (1)
 		udf_node_dump(udf_node);
@@ -307,7 +307,7 @@ udf_node_sanity_check(struct udf_node *udf_node,
 	KASSERT(*cnt_inflen == inflen);
 	KASSERT(*cnt_logblksrec == logblksrec);
 
-//	KASSERT(mutex_owned(&udf_node->ump->allocate_mutex));
+	KASSERT(mutex_owned(&udf_node->ump->allocate_mutex));
 }
 #else
 static void
@@ -338,7 +338,7 @@ udf_node_sanity_check(struct udf_node *udf_node,
 	*cnt_inflen     = inflen;
 }
 #endif
-
+#endif
 /* --------------------------------------------------------------------- */
 
 void
@@ -358,9 +358,10 @@ udf_calc_freespace(struct udf_mount *ump, uint64_t *sizeblks, uint64_t *freeblks
 	 * We sum all free space up here regardless of type.
 	 */
 
-	KASSERT(lvid);
+/*	KASSERT(lvid); */
 	num_vpart = le32toh(lvid->num_part);
 
+#if 0
 	if (ump->discinfo.mmc_cur & MMC_CAP_SEQUENTIAL) {
 		/* use track info directly summing if there are 2 open */
 		/* XXX assumption at most two tracks open */
@@ -369,6 +370,7 @@ udf_calc_freespace(struct udf_mount *ump, uint64_t *sizeblks, uint64_t *freeblks
 			*freeblks += ump->metadata_track.free_blocks;
 		*sizeblks = ump->discinfo.last_possible_lba;
 	} else {
+#endif
 		/* free and used space for mountpoint based on logvol integrity */
 		for (vpart = 0; vpart < num_vpart; vpart++) {
 			pos1 = &lvid->tables[0] + vpart;
@@ -378,7 +380,9 @@ udf_calc_freespace(struct udf_mount *ump, uint64_t *sizeblks, uint64_t *freeblks
 				*sizeblks += le32toh(*pos2);
 			}
 		}
+#if 0
 	}
+#endif
 	/* adjust for accounted uncommitted blocks */
 	for (vpart = 0; vpart < num_vpart; vpart++)
 		*freeblks -= ump->uncommitted_lbs[vpart];
@@ -390,7 +394,7 @@ udf_calc_freespace(struct udf_mount *ump, uint64_t *sizeblks, uint64_t *freeblks
 	}
 }
 
-
+#if 0
 static void
 udf_calc_vpart_freespace(struct udf_mount *ump, uint16_t vpart_num, uint64_t *freeblks)
 {
@@ -436,7 +440,6 @@ int
 udf_translate_vtop(struct udf_mount *ump, struct long_ad *icb_loc,
 		   uint32_t *lb_numres, uint32_t *extres)
 {
-printf("%s ran\n", __func__);
 	struct part_desc       *pdesc;
 	struct spare_map_entry *sme;
 	struct long_ad s_icb_loc;
@@ -478,11 +481,11 @@ translate_again:
 			return EINVAL;
 
 		/* lookup in virtual allocation table file */
-//		mutex_enter(&ump->allocate_mutex);
+/*		mutex_enter(&ump->allocate_mutex); */
 		error = udf_vat_read(ump->vat_node,
 				(uint8_t *) &udf_rw32_lbmap, 4,
 				ump->vat_offset + lb_num * 4);
-//		mutex_exit(&ump->allocate_mutex);
+/*		mutex_exit(&ump->allocate_mutex); */
 
 		if (error)
 			return error;
@@ -584,7 +587,7 @@ printf("meta hell\n");
 
 /* XXX  provisional primitive braindead version */
 /* TODO use ext_res */
-#if 0 // write only
+#if 0
 void
 udf_translate_vtop_list(struct udf_mount *ump, uint32_t sectors,
 	uint16_t vpart_num, uint64_t *lmapping, uint64_t *pmapping)
@@ -613,7 +616,6 @@ int
 udf_bmap_translate(struct udf_node *udf_node, uint32_t block, 
 		   uint64_t *lsector, uint32_t *maxblks)
 {
-printf("%s ran\n", __func__);
 	struct udf_mount *ump;
 	struct icb_tag *icbtag;
 	struct long_ad t_ad, s_ad;
@@ -714,7 +716,6 @@ printf("%s ran\n", __func__);
 
 	UDF_UNLOCK_NODE(udf_node, 0);
 
-printf("%s exiting\n", __func__);
 	return 0;
 }
 /* --------------------------------------------------------------------- */
@@ -723,7 +724,7 @@ printf("%s exiting\n", __func__);
  * Translate an extent (in logical_blocks) into logical block numbers; used
  * for read and write operations. DOESNT't check extents.
  */
-#if 0 // not used now
+#if 0
 int
 udf_translate_file_extent(struct udf_node *udf_node,
 		          uint32_t from, uint32_t num_lb,
@@ -1003,7 +1004,7 @@ udf_bitmap_allocate(struct udf_bitmap *bitmap, int ismetadata,
 			lb_num = offset + bit-1;
 			*lmappos++ = lb_num;
 			*num_lb = *num_lb - 1;
-			// offset = (offset & ~7);
+			/* offset = (offset & ~7); */
 		}
 	}
 
@@ -1611,7 +1612,7 @@ udf_trunc_metadatapart(struct udf_mount *ump, uint32_t num_lb)
 	*sizepos = le32toh(*sizepos) - to_trunc;
 
 	/* realloc bitmap for better memory usage */
-	new_sbd = realloc(sbd, inf_len, M_UDFVOLD,
+	new_sbd = realloc(sbd, inf_len, M_UDFTEMP,
 		M_CANFAIL | M_WAITOK);
 	if (new_sbd) {
 		/* update pointers */
@@ -2317,7 +2318,7 @@ udf_record_allocation_in_node(struct udf_mount *ump, struct buf *buf,
 	uint32_t run_start;
 	uint32_t slot_offset, replace_len, replace;
 	int addr_type, icbflags;
-//	int udf_c_type = buf->b_udf_c_type;
+/*	int udf_c_type = buf->b_udf_c_type; */
 	int lb_size, run_length, eof;
 	int slot, cpy_slot, cpy_slots, restart_slot;
 	int error;
@@ -3037,7 +3038,7 @@ udf_shrink_node(struct udf_node *udf_node, uint64_t new_size)
 
 	/* setup node cleanup extents copy space */
 	node_ad_cpy = malloc(lb_size * UDF_MAX_ALLOC_EXTENTS,
-		M_UDFMNT, M_WAITOK);
+		M_UDFTEMP, M_WAITOK);
 	memset(node_ad_cpy, 0, lb_size * UDF_MAX_ALLOC_EXTENTS);
 
 	/*
@@ -3182,7 +3183,7 @@ udf_shrink_node(struct udf_node *udf_node, uint64_t new_size)
 			/* set new size for uvm */
 			uvm_vnp_setsize(vp, new_size);
 
-			free(node_ad_cpy, M_UDFMNT);
+			free(node_ad_cpy, M_UDFTEMP);
 			udf_node_sanity_check(udf_node, &new_inflen, &new_lbrec);
 
 			UDF_UNLOCK_NODE(udf_node, 0);
@@ -3262,7 +3263,7 @@ udf_shrink_node(struct udf_node *udf_node, uint64_t new_size)
 	uvm_vnp_setsize(vp, new_size);
 
 errorout:
-	free(node_ad_cpy, M_UDFMNT);
+	free(node_ad_cpy, M_UDFTEMP);
 
 	udf_count_alloc_exts(udf_node);
 

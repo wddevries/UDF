@@ -47,18 +47,12 @@
 #include "udf_subr.h"
 #include "udf_mount.h"
 
-/* malloc regions */
-MALLOC_DEFINE(M_UDFMNT, "UDF mount", "UDF mount structures");
-MALLOC_DEFINE(M_UDFVOLD, "UDF volspace", "UDF volume space descriptors");
-MALLOC_DEFINE(M_UDFTEMP, "UDF temp", "UDF scrap space");
-
-//struct pool udf_node_pool;
+MALLOC_DEFINE(M_UDFTEMP, "UDF temp", "UDF allocation space");
 uma_zone_t udf_zone_node = NULL;
 
 struct iconv_functions *udf2_iconv = NULL;
 
-/* internal functions */
-static int udf_mountfs(struct vnode *, struct mount *); //, struct lwp *, struct udf_args *);
+static int udf_mountfs(struct vnode *, struct mount *); 
 
 /* --------------------------------------------------------------------- */
 
@@ -88,14 +82,12 @@ MODULE_VERSION(udf2, 1);
 
 /* --------------------------------------------------------------------- */
 
-/* file system starts here */
 static int
 udf_init(struct vfsconf *notused)
 {
-printf("%s ran\n", __func__);
 	/* init node pools */
-	udf_zone_node = uma_zcreate("UDF Node Pool Zone", sizeof(struct udf_node),
-		NULL, NULL, NULL, NULL, 0, 0);
+	udf_zone_node = uma_zcreate("UDF Node Pool Zone", 
+	    sizeof(struct udf_node), NULL, NULL, NULL, NULL, 0, 0);
 
 	if (udf_zone_node == NULL) {
 		printf("Cannot create node pool zone.");
@@ -108,7 +100,6 @@ printf("%s ran\n", __func__);
 static int
 udf_uninit(struct vfsconf *notused)
 {
-printf("%s ran\n", __func__);
 	/* remove pools */
 	if (udf_zone_node != NULL) {
 		uma_zdestroy(udf_zone_node);
@@ -125,7 +116,6 @@ printf("%s ran\n", __func__);
 static void
 free_udf_mountinfo(struct mount *mp)
 {
-printf("%s ran\n", __func__);
 	struct udf_mount *ump;
 	int i;
 
@@ -136,35 +126,37 @@ printf("%s ran\n", __func__);
 	if (ump) {
 		/* clear our data */
 		for (i = 0; i < UDF_ANCHORS; i++)
-			MPFREE(ump->anchors[i], M_UDFVOLD);
-		MPFREE(ump->primary_vol,      M_UDFVOLD);
-		MPFREE(ump->logical_vol,      M_UDFVOLD);
-		MPFREE(ump->unallocated,      M_UDFVOLD);
-		MPFREE(ump->implementation,   M_UDFVOLD);
-		MPFREE(ump->logvol_integrity, M_UDFVOLD);
+			MPFREE(ump->anchors[i], M_UDFTEMP);
+		MPFREE(ump->primary_vol,      M_UDFTEMP);
+		MPFREE(ump->logical_vol,      M_UDFTEMP);
+		MPFREE(ump->unallocated,      M_UDFTEMP);
+		MPFREE(ump->implementation,   M_UDFTEMP);
+		MPFREE(ump->logvol_integrity, M_UDFTEMP);
 		for (i = 0; i < UDF_PARTITIONS; i++) {
-			MPFREE(ump->partitions[i],        M_UDFVOLD);
-			MPFREE(ump->part_unalloc_dscr[i], M_UDFVOLD);
-			MPFREE(ump->part_freed_dscr[i],   M_UDFVOLD);
+			MPFREE(ump->partitions[i],        M_UDFTEMP);
+			MPFREE(ump->part_unalloc_dscr[i], M_UDFTEMP);
+			MPFREE(ump->part_freed_dscr[i],   M_UDFTEMP);
 		}
-		MPFREE(ump->metadata_unalloc_dscr, M_UDFVOLD);
+		MPFREE(ump->metadata_unalloc_dscr, M_UDFTEMP);
 
-		MPFREE(ump->fileset_desc,   M_UDFVOLD);
-		MPFREE(ump->sparing_table,  M_UDFVOLD);
+		MPFREE(ump->fileset_desc,   M_UDFTEMP);
+		MPFREE(ump->sparing_table,  M_UDFTEMP);
 
-		//MPFREE(ump->la_node_ad_cpy, M_UDFMNT);
-		//MPFREE(ump->la_pmapping,    M_TEMP);
-		//MPFREE(ump->la_lmapping,    M_TEMP);
+#if 0
+		MPFREE(ump->la_node_ad_cpy, M_UDFTEMP);
+		MPFREE(ump->la_pmapping,    M_UDFTEMP);
+		MPFREE(ump->la_lmapping,    M_UDFTEMP);
 
-		//mutex_destroy(&ump->ihash_lock);
-		//mutex_destroy(&ump->get_node_lock);
-		//mutex_destroy(&ump->logvol_mutex);
-		//mutex_destroy(&ump->allocate_mutex);
-		//cv_destroy(&ump->dirtynodes_cv);
+		mutex_destroy(&ump->ihash_lock);
+		mutex_destroy(&ump->get_node_lock);
+		mutex_destroy(&ump->logvol_mutex);
+		mutex_destroy(&ump->allocate_mutex);
+		cv_destroy(&ump->dirtynodes_cv);
+#endif
 
-		MPFREE(ump->vat_table, M_UDFVOLD);
+		MPFREE(ump->vat_table, M_UDFTEMP);
 
-		free(ump, M_UDFMNT);
+		free(ump, M_UDFTEMP);
 	}
 }
 #undef MPFREE
@@ -175,28 +167,25 @@ printf("%s ran\n", __func__);
 static void
 udf_release_system_nodes(struct mount *mp)
 {
-printf("%s ran\n", __func__);
 	struct udf_mount *ump = VFSTOUDF(mp);
 
 	/* if we haven't even got an ump, dont bother */
 	if (!ump)
 		return;
 
-#if 0
 	/* VAT partition support */
-	if (ump->vat_node) {
-		vdrop(ump->vat_node->vnode);
-		vrele(ump->vat_node->vnode);
-	}
+	if (ump->vat_node)
+		udf_dispose_node(ump->vat_node);
 
 	/* Metadata partition support */
 	if (ump->metadata_node)
-		vrele(ump->metadata_node->vnode);
+		udf_dispose_node(ump->metadata_node);
 	if (ump->metadatamirror_node)
-		vrele(ump->metadatamirror_node->vnode);
+		udf_dispose_node(ump->metadatamirror_node);
 	if (ump->metadatabitmap_node)
-		vrele(ump->metadatabitmap_node->vnode);
+		udf_dispose_node(ump->metadatabitmap_node);
 
+#if 0
 	/* This flush should NOT write anything nor allow any node to remain */
 	if (vflush(ump->vfs_mountp, NULLVP, 0) != 0)
 		panic("Failure to flush UDF system vnodes\n");
@@ -205,9 +194,8 @@ printf("%s ran\n", __func__);
 
 
 static int
-udf_mount(struct mount *mp) //, const char *path, void *data, size_t *data_len)
+udf_mount(struct mount *mp)
 {
-	printf("%s ran\n", __func__);
 	struct thread *td;	
 	struct vnode *devvp;
 	struct nameidata nd;
@@ -278,7 +266,7 @@ udf_mount(struct mount *mp) //, const char *path, void *data, size_t *data_len)
 	}
 #endif
 	
-	// TODO: Add some iconv code here.
+	/* TODO: Add some iconv code here. */
 
 	vfs_mountedfrom(mp, fspec);
 	return 0;
@@ -308,7 +296,6 @@ udf_unmount_sanity_check(struct mount *mp)
 int
 udf_unmount(struct mount *mp, int mntflags)
 {
-	printf("%s ran\n", __func__);
 	struct udf_mount *ump;
 	int error, flags;
 
@@ -345,12 +332,10 @@ udf_unmount(struct mount *mp, int mntflags)
 	/* flush again, to check if we are still busy for something else */
 	if ((error = vflush(ump->vfs_mountp, NULLVP, flags | SKIPSYSTEM)) != 0)
 		return error;
-#endif
 
 	/* close logical volume and close session if requested */
 	if ((error = udf_close_logvol(ump, mntflags)) != 0)
 		return error;
-#if 0 
 #ifdef DEBUG
 	DPRINTF(VOLUMES, ("FINAL sanity check\n"));
 	if (udf_verbose & UDF_DEBUG_LOCKING)
@@ -406,19 +391,17 @@ udf_unmount(struct mount *mp, int mntflags)
 static int
 udf_mountfs(struct vnode *devvp, struct mount *mp)
 {
-printf("%s ran\n", __func__);
-
 	struct g_consumer *cp;
 	struct cdev *dev;
 	struct udf_mount     *ump = NULL;
 	int    num_anchors, error, len, *udf_flags;
-	uint32_t sector_size, bshift, logvol_integrity; //lb_size,
+	uint32_t sector_size, bshift, logvol_integrity; /*lb_size,*/
 	char *cs_disk, *cs_local;
 	void *optdata;
 
 	/* flush out any old buffers remaining from a previous use. */
-	//if ((error = vinvalbuf(devvp, V_SAVE, l->l_cred, l, 0, 0)))
-	//	return error;
+	/*if ((error = vinvalbuf(devvp, V_SAVE, l->l_cred, l, 0, 0)))
+		return error; */
 
 	/* Open a consumer.  This seems to setup the bufobj used later. */
 	dev = devvp->v_rdev;
@@ -428,12 +411,12 @@ printf("%s ran\n", __func__);
 	error = g_vfs_open(devvp, &cp, "udf2", 0);
 	g_topology_unlock();
 	PICKUP_GIANT();
-	VOP_UNLOCK(devvp, 0); // this is required before return
+	VOP_UNLOCK(devvp, 0);
 	if (error)
 		goto fail;
 
 	/* allocate udf part of mount structure; malloc always succeeds */
-	ump = malloc(sizeof(struct udf_mount), M_UDFMNT, M_WAITOK | M_ZERO);
+	ump = malloc(sizeof(struct udf_mount), M_UDFTEMP, M_WAITOK | M_ZERO);
 	if (ump == NULL) {
 		printf("Memory allocation error for udf_mount struct.");
 		error = ENOMEM;
@@ -442,8 +425,8 @@ printf("%s ran\n", __func__);
 
 	/* setup basic mount information */
 	mp->mnt_data = ump;
-	mp->mnt_stat.f_fsid.val[0] = dev2udev(devvp->v_rdev); //(uint32_t) devvp->v_rdev;
-	mp->mnt_stat.f_fsid.val[1] = mp->mnt_vfc->vfc_typenum; // makefstype(MOUNT_UDF);
+	mp->mnt_stat.f_fsid.val[0] = dev2udev(devvp->v_rdev);
+	mp->mnt_stat.f_fsid.val[1] = mp->mnt_vfc->vfc_typenum;
 	mp->mnt_stat.f_namemax = UDF_MAX_NAMELEN;
 	if (devvp->v_rdev->si_iosize_max != 0)
 		mp->mnt_iosize_max = devvp->v_rdev->si_iosize_max;
@@ -456,11 +439,13 @@ printf("%s ran\n", __func__);
 	MNT_IUNLOCK(mp);
 
 	/* init locks */
-//	mutex_init(&ump->logvol_mutex, MUTEX_DEFAULT, IPL_NONE);
-//	mutex_init(&ump->ihash_lock, MUTEX_DEFAULT, IPL_NONE);
-//	mutex_init(&ump->get_node_lock, MUTEX_DEFAULT, IPL_NONE);
-//	mutex_init(&ump->allocate_mutex, MUTEX_DEFAULT, IPL_NONE);
-//	cv_init(&ump->dirtynodes_cv, "udfsync2");
+#if 0
+	mutex_init(&ump->logvol_mutex, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&ump->ihash_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&ump->get_node_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&ump->allocate_mutex, MUTEX_DEFAULT, IPL_NONE);
+	cv_init(&ump->dirtynodes_cv, "udfsync2");
+#endif
 
 	/* set up linkage */
 	mp->mnt_data    = ump;
@@ -476,7 +461,6 @@ printf("%s ran\n", __func__);
 	if (error || len != sizeof(int))
 		return (EINVAL);
 	ump->flags = *udf_flags;
-printf("udf_flags: %x\n", ump->flags);
 	
 	/* read in disk info from options */
 	ump->anon_uid = 0;
@@ -510,13 +494,7 @@ printf("udf_flags: %x\n", ump->flags);
 
 	ump->last_possible_vat_location = ump->session_end;
 
-if (udf2_iconv == NULL) {
-	printf("Iconv is NULL\n");
-} else {
-	printf("Iconv is not NULL\n");
-}
 	if (ump->flags & UDFMNT_KICONV && udf2_iconv) {
-printf("setting up iconv #########\n");
 #if 0
 		cs_disk = NULL;
 		error = vfs_getopt(mp->mnt_optnew, "cs_disk", (void **)&cs_disk, &len);
@@ -597,17 +575,16 @@ printf("setting up iconv #########\n");
 #if 0
 	/* initialise bootstrap disc strategy */
 	ump->strategy = &udf_strat_bootstrap;
-	udf_discstrat_init(ump); // noop
+	udf_discstrat_init(ump);
 #endif
 
 	/* read all anchors to get volume descriptor sequence */
 	num_anchors = udf_read_anchors(ump);
 	if (num_anchors == 0) {
-printf("anchor trouble\n");
+		printf("UDF mount: error reading anchors\n");
 		error = EINVAL;
 		goto fail;
 	}
-udf_print_anchors(ump);
 
 	/* read in volume descriptor sequence */
 	if ((error = udf_read_vds_space(ump))) {
@@ -634,14 +611,14 @@ udf_print_anchors(ump);
 
 	/* initialise late allocation administration space */
 	ump->la_lmapping = malloc(sizeof(uint64_t) * UDF_MAX_MAPPINGS,
-			M_TEMP, M_WAITOK);
+			M_UDFTEMP, M_WAITOK);
 	ump->la_pmapping = malloc(sizeof(uint64_t) * UDF_MAX_MAPPINGS,
-			M_TEMP, M_WAITOK);
+			M_UDFTEMP, M_WAITOK);
 
 	/* setup node cleanup extents copy space */
 	lb_size = le32toh(ump->logical_vol->lb_size);
 	ump->la_node_ad_cpy = malloc(lb_size * UDF_MAX_ALLOC_EXTENTS,
-		M_UDFMNT, M_WAITOK);
+		M_UDFTEMP, M_WAITOK);
 	memset(ump->la_node_ad_cpy, 0, lb_size * UDF_MAX_ALLOC_EXTENTS);
 #endif
 
@@ -673,7 +650,7 @@ udf_print_anchors(ump);
 	}
 
 	/* do we have to set this? */
-	// devvp->v_specmountpoint = mp;
+	/* devvp->v_specmountpoint = mp; */
 
 	/* success! */
 	return 0;
@@ -689,7 +666,7 @@ fail:
 	dev_rel(dev);
 	if (ump != NULL) {
 		udf_release_system_nodes(mp);
-		//udf_discstrat_finish(VFSTOUDF(mp));
+		/*udf_discstrat_finish(VFSTOUDF(mp)); */
 		free_udf_mountinfo(mp);
 	}
 	return error;
@@ -700,8 +677,6 @@ fail:
 int
 udf_root(struct mount *mp, int flags, struct vnode **vpp)
 {
-	printf("%s ran\n", __func__);
-
 	struct long_ad *dir_loc;
 	struct udf_mount *ump = VFSTOUDF(mp);
 	ino_t ino;
@@ -722,18 +697,16 @@ udf_root(struct mount *mp, int flags, struct vnode **vpp)
 int
 udf_statfs(struct mount *mp, struct statfs *sbp)
 {
-	printf("%s ran\n", __func__);
-
 	struct udf_mount *ump = VFSTOUDF(mp);
 	struct logvol_int_desc *lvid;
 	struct udf_logvol_info *impl;
 	uint64_t sizeblks, freeblks, files; 
 	int num_part;
 	
-//	mutex_enter(&ump->allocate_mutex);
-//	udf_calc_freespace(ump, &sizeblks, &freeblks);
-	sizeblks =0; // added to make if just compile.
-	freeblks = 0;
+/*	mutex_enter(&ump->allocate_mutex); */
+	udf_calc_freespace(ump, &sizeblks, &freeblks);
+	//sizeblks = 0; // added to make if just compile.
+	//freeblks = 0;
 	files = 0;
 
 	lvid = ump->logvol_integrity;
@@ -743,30 +716,30 @@ udf_statfs(struct mount *mp, struct statfs *sbp)
 		files  = le32toh(impl->num_files);
 		files += le32toh(impl->num_directories);
 	}
-//	mutex_exit(&ump->allocate_mutex);
+/*	mutex_exit(&ump->allocate_mutex); */
 	
-	sbp->f_version = STATFS_VERSION; /* structure version number */
-	//uint32_t f_type;		/* type of filesystem */
-	sbp->f_flags   = mp->mnt_flag; 	/* copy of mount exported flags */
-	sbp->f_bsize = ump->sector_size; /* filesystem fragment size */
-	sbp->f_iosize = ump->sector_size; /* optimal transfer block size */
-	sbp->f_blocks = sizeblks;	/* total data blocks in filesystem */
-	sbp->f_bfree  = freeblks;	/* free blocks in filesystem */
-	sbp->f_bavail = 0;		/* free blocks avail to non-superuser */
-	sbp->f_files = files;		/* total file nodes in filesystem */
-	sbp->f_ffree  = 0;		/* free nodes avail to non-superuser */
-	//uint64_t f_syncwrites;		/* count of sync writes since mount */
-	//uint64_t f_asyncwrites;		/* count of async writes since mount */
-	//uint64_t f_syncreads;		/* count of sync reads since mount */
-	//uint64_t f_asyncreads;		/* count of async reads since mount */
-	//uint64_t f_spare[10];		/* unused spare */
-	//uint32_t f_namemax;		/* maximum filename length */
-	//uid_t	  f_owner;		/* user that mounted the filesystem */
-	//fsid_t	  f_fsid;		/* filesystem id */
-	//char	  f_charspare[80];	    /* spare string space */
-	//char	  f_fstypename[MFSNAMELEN]; /* filesystem type name */
-	//char	  f_mntfromname[MNAMELEN];  /* mounted filesystem */
-	//char	  f_mntonname[MNAMELEN];    /* directory on which mounted */
+	sbp->f_version = STATFS_VERSION; 	/* structure version number */
+	/*uint32_t f_type;*/			/* type of filesystem */
+	sbp->f_flags   = mp->mnt_flag; 		/* copy of mount exported flags */
+	sbp->f_bsize = ump->sector_size; 	/* filesystem fragment size */
+	sbp->f_iosize = ump->sector_size; 	/* optimal transfer block size */
+	sbp->f_blocks = sizeblks;		/* total data blocks in filesystem */
+	sbp->f_bfree  = freeblks;		/* free blocks in filesystem */
+	sbp->f_bavail = 0;			/* free blocks avail to non-superuser */
+	sbp->f_files = files;			/* total file nodes in filesystem */
+	sbp->f_ffree  = 0;			/* free nodes avail to non-superuser */
+	/*uint64_t f_syncwrites;*/		/* count of sync writes since mount */
+	/*uint64_t f_asyncwrites;*/		/* count of async writes since mount */
+	/*uint64_t f_syncreads;*/		/* count of sync reads since mount */
+	/*uint64_t f_asyncreads;*/		/* count of async reads since mount */
+	/*uint64_t f_spare[10];*/		/* unused spare */
+	/*uint32_t f_namemax;*/			/* maximum filename length */
+	/*uid_t	  f_owner;*/			/* user that mounted the filesystem */
+	/*fsid_t	  f_fsid;*/		/* filesystem id */
+	/*char	  f_charspare[80];*/	    	/* spare string space */
+	/*char	  f_fstypename[MFSNAMELEN];*/ 	/* filesystem type name */
+	/*char	  f_mntfromname[MNAMELEN];*/  	/* mounted filesystem */
+	/*char	  f_mntonname[MNAMELEN];*/    	/* directory on which mounted */
 	
 	return 0;
 }
@@ -808,9 +781,8 @@ udf_sync_writeout_system_files(struct udf_mount *ump, int clearflags)
 
 	return error;
 }
-#endif
 
-#if 0 //write only
+
 int
 udf_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 {
@@ -846,8 +818,6 @@ udf_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 struct udf_node *
 udf_alloc_node()
 {
-printf("%s ran\n", __func__);
-
 	return uma_zalloc(udf_zone_node, M_WAITOK | M_ZERO);
 }
 
@@ -870,8 +840,6 @@ udf_free_node(struct udf_node *unode)
 int
 udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 {
-	printf("%s ran\n", __func__);
-
 	struct vnode *nvp;
 	struct udf_node *unode;
 	struct udf_mount *ump;
@@ -908,7 +876,6 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	if (error) {
 		vgone(nvp);
 		vput(nvp);
-//		ungetnewvnode(nvp);
 	}
 	nvp->v_data = unode;
 	unode->vnode = nvp;
@@ -967,7 +934,7 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	/* TODO specfs, fifofs etc etc. vnops setting */
 
 	/* don't forget to set vnode's v_size */
-//	uvm_vnp_setsize(nvp, file_size);
+/*	uvm_vnp_setsize(nvp, file_size); */
 
 	if (nvp->v_type != VFIFO)
 		VN_LOCK_ASHARE(nvp);
@@ -986,7 +953,6 @@ int
 udf_fhtovp(struct mount *mp, struct fid *fhp, int flags,
     struct vnode **vpp)
 {
-printf("%s ran\n", __func__);
 	struct vnode *vp;
 	struct udf_fid *ufid = (struct udf_fid*)fhp;
 	struct udf_node *udf_node;

@@ -179,7 +179,6 @@ uint32_t sessend = usi.session_end_addr;
 	iov[i++].iov_len = sizeof(uint32_t);
 
 	if (udf_flags & UDFMNT_KICONV) {
-printf("was added in at mount\n");
 		iov[i].iov_base = "cs_disk";
 		iov[i++].iov_len = sizeof("cs_disk");
 		iov[i].iov_base = cs_disk;

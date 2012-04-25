@@ -73,7 +73,7 @@ udf_to_utf8(char **result, size_t *rrem, uint32_t ch)
 		rp[2] = 0x80 | (0x3F & (ch >> 6));
 		rp[3] = 0x80 | (0x3F & ch);
 	} else {
-		// do not convert points above 21 bits.
+		/* do not convert points above 21 bits. */
 		return 0;
 	}
 
@@ -175,6 +175,8 @@ udf_convert_str(struct udf_mount *ump, char *result, size_t result_len, int *ext
 	}
 
 	*rp = '\0';
+
+	free(index, M_UDFTEMP);
 }
 
 void
@@ -182,7 +184,7 @@ udf_to_unix_name(struct udf_mount *ump, char *result, int result_len, char *id, 
 	int extloc, eightbit;
 
 	if (id[0] != 8 && id[0] != 16) {
-		// this is either invalid or an empty string
+		/* this is either invalid or an empty string */
 		result_len = 0;
 		return;
 	} 

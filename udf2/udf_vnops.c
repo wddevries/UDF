@@ -94,17 +94,12 @@ struct vop_vector udf_fifoops = {
 	.vop_default =	&fifo_specops,
 };
 
-/* externs */
-//extern int prtactive;
-
 /* implementations of vnode functions; table follows at end */
 /* --------------------------------------------------------------------- */
 
 int
 udf_getanode(struct mount *mp, struct vnode **vpp)
 {
-printf("%s ran\n", __func__);
-
 	return getnewvnode("udf2", mp, &udf_vnodeops, vpp);
 }
 
@@ -168,19 +163,13 @@ udf_inactive(void *v)
 #endif
 /* --------------------------------------------------------------------- */
 
-//int udf_sync(struct mount *mp, int waitfor, kauth_cred_t cred, struct lwp *lwp);
 
 static int
 udf_reclaim(struct vop_reclaim_args *ap)
 {
-	printf("%s ran\n", __func__);
-
 	struct vnode *vp = ap->a_vp;
 	struct udf_node *udf_node = VTOI(vp);
 
-//	if (prtactive && vp->v_usecount > 1)
-//		vprint("udf_reclaim(): pushing active", vp);
-	
 	vnode_destroy_vobject(vp);
 
 	if (udf_node == NULL)
@@ -210,8 +199,6 @@ udf_reclaim(struct vop_reclaim_args *ap)
 static int
 udf_read(struct vop_read_args *ap)
 {
-	printf("%s ran\n", __func__);
-
 	struct vnode *vp     = ap->a_vp;
 	struct uio *uio    = ap->a_uio;
 	struct buf *bp;
@@ -431,7 +418,6 @@ udf_bmap(struct vop_bmap_args /* {
 		int *a_runb;
 	 } */ *ap)
 {
-printf("%s ran requesting %ld\n", __func__, ap->a_bn);
 	struct vnode  *vp  = ap->a_vp;	/* our node	*/
 	struct udf_node *udf_node = VTOI(vp);
 	uint64_t lsector;
@@ -453,7 +439,7 @@ printf("%s ran requesting %ld\n", __func__, ap->a_bn);
 	if (lsector == UDF_TRANS_INTERN)
 		return EOPNOTSUPP;
 	else if (lsector == UDF_TRANS_ZERO)
-		*ap->a_bnp = -1; // zero the buffer
+		*ap->a_bnp = -1; /* zero the buffer */
 	else
 		*ap->a_bnp = lsector * (udf_node->ump->sector_size/DEV_BSIZE);
 
@@ -471,8 +457,6 @@ printf("%s ran requesting %ld\n", __func__, ap->a_bn);
 static int
 udf_strategy(struct vop_strategy_args *ap)
 {
-	printf("%s ran\n", __func__);
-
 	struct vnode *vp = ap->a_vp;
 	struct buf   *bp = ap->a_bp;
 	struct udf_node *udf_node = VTOI(vp);
@@ -535,8 +519,6 @@ udf_readdir(struct vop_readdir_args /* {
                 u_long **a_cookies;
         } */ *ap)
 {
-printf("%s ran\n", __func__);
-
 	struct uio *uio;
 	struct vnode *vp;
 	struct file_entry *fe;
@@ -574,7 +556,7 @@ printf("%s ran\n", __func__);
 	if (ap->a_ncookies != NULL) {
 		/* is this the max number possible? */
 		ncookies = uio->uio_resid / 8;
-		cookies = malloc(sizeof(u_long) * ncookies, M_TEMP, 
+		cookies = malloc(sizeof(u_long) * ncookies, M_UDFTEMP, 
 		    M_WAITOK | M_ZERO);
 		if (cookies == NULL)
 			return ENOMEM;
@@ -679,8 +661,10 @@ printf("%s ran\n", __func__);
 
 			/* copy dirent to the caller */
 			if (cookiesp) {
-				//if (++acookies >= ncookies)
-				//	break;
+				/*
+				if (++acookies >= ncookies)
+					break; 
+				*/
 				acookies++;
 				*cookiesp++ = cookie;
 			}
@@ -698,17 +682,9 @@ printf("%s ran\n", __func__);
 bail:
 	*ap->a_eofflag = (uio->uio_offset >= file_size);
 
-#ifdef DEBUG
-	printf("returning offset %d\n", (uint32_t) uio->uio_offset);
-	if (ap->a_eofflag)
-		printf("returning EOF ? %d\n", *ap->a_eofflag);
-	if (error)
-		printf("readdir returning error %d\n", error);
-#endif
-
 	if (ap->a_ncookies != NULL) {
 		if (error) {
-			free(cookies, M_TEMP);
+			free(cookies, M_UDFTEMP);
 		} else {
 			*ap->a_ncookies = acookies;
 			*ap->a_cookies = cookies;
@@ -724,8 +700,6 @@ bail:
 static int
 udf_cachedlookup(struct vop_cachedlookup_args *ap)
 {
-	printf("%s ran\n", __func__);
-
 	struct vnode *dvp = ap->a_dvp;
 	struct vnode **vpp = ap->a_vpp;
 	struct vnode *tdp = NULL;
@@ -813,11 +787,9 @@ lookuploop:
 			}
 		}
 	}
-	free(fid, M_UDFTEMP);
-	free(unix_name, M_UDFTEMP);
 
 	if (error)
-		return error;
+		goto exit; 
 
 	if (id) {
 		if ((cnp->cn_flags & ISLASTCN) && cnp->cn_nameiop == LOOKUP)
@@ -866,6 +838,10 @@ lookuploop:
 			error = ENOENT;
 	}
 
+exit:
+	free(fid, M_UDFTEMP);
+	free(unix_name, M_UDFTEMP);
+
 	return error;
 #if 0
 	not sure if anything like this would be needed.
@@ -884,8 +860,6 @@ lookuploop:
 static int
 udf_getattr(struct vop_getattr_args *ap)
 {
-	printf("%s ran\n", __func__);
-
 	struct vnode *vp = ap->a_vp;
 	struct udf_node *udf_node = VTOI(vp);
 	struct file_entry    *fe  = udf_node->fe;
@@ -904,7 +878,9 @@ udf_getattr(struct vop_getattr_args *ap)
 	uint8_t *filedata;
 
 	/* update times before we returning values */ 
-//	udf_itimes(udf_node, NULL, NULL, NULL);
+#if 0
+	udf_itimes(udf_node, NULL, NULL, NULL);
+#endif
 
 	/* get descriptor information */
 	if (fe) {
@@ -957,7 +933,7 @@ udf_getattr(struct vop_getattr_args *ap)
 	if (vp->v_type == VDIR) {
 		nlink++;
 
-		// directories should be at least a single block?
+		/* directories should be at least a single block? */
 		if (blkssize != 0) 
 			filesize = blkssize * ump->sector_size;
 		else
@@ -971,7 +947,7 @@ udf_getattr(struct vop_getattr_args *ap)
 	vap->va_nlink     = nlink;
 	vap->va_uid       = uid;
 	vap->va_gid       = gid;
-	vap->va_fsid      = dev2udev(ump->dev); //vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0];
+	vap->va_fsid      = dev2udev(ump->dev); /* vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0]; */
 	vap->va_fileid    = udf_get_node_id(&udf_node->loc);   /* inode hash XXX */
 	vap->va_size      = filesize;
 	vap->va_blocksize = ump->sector_size;  /* wise? */
@@ -1206,12 +1182,10 @@ udf_chtimes(struct vnode *vp,
 static int
 udf_setattr(struct vop_setattr_args *ap)
 {
-	printf("%s ran\n", __func__);
-
-//	struct vnode *vp = ap->a_vp;
+/*	struct vnode *vp = ap->a_vp; */
 /*	struct udf_node  *udf_node = VTOI(vp); */
 /*	struct udf_mount *ump = udf_node->ump; */
-//	kauth_cred_t cred = ap->a_cred;
+/*	kauth_cred_t cred = ap->a_cred; */
 	struct vattr *vap = ap->a_vap;
 	int error;
 
@@ -1236,7 +1210,7 @@ udf_setattr(struct vop_setattr_args *ap)
 
 	if (error == 0 && (vap->va_flags != VNOVAL)) {
 		return EROFS;
-//		error = udf_chflags(vp, vap->va_flags, cred);
+/*		error = udf_chflags(vp, vap->va_flags, cred); */
 	}
 
 	if (error == 0 && (vap->va_size != VNOVAL)) {
@@ -1244,17 +1218,17 @@ udf_setattr(struct vop_setattr_args *ap)
 			return EISDIR;
 		if (vap->va_type == VLNK || vap->va_type == VREG)
 			return EROFS;
-//		error = udf_chsize(vp, vap->va_size, cred);
+/*		error = udf_chsize(vp, vap->va_size, cred); */
 	}
 
 	if (error == 0 && (vap->va_uid != VNOVAL || vap->va_gid != VNOVAL)) {
 		return EROFS;
-//		error = udf_chown(vp, vap->va_uid, vap->va_gid, cred);
+/*		error = udf_chown(vp, vap->va_uid, vap->va_gid, cred); */
 	}
 
 	if (error == 0 && (vap->va_mode != (mode_t)VNOVAL)) {
 		return EROFS;
-//		error = udf_chmod(vp, vap->va_mode, cred);
+/*		error = udf_chmod(vp, vap->va_mode, cred); */
 	}
 
 	if (error == 0 &&
@@ -1264,10 +1238,10 @@ udf_setattr(struct vop_setattr_args *ap)
 	      vap->va_mtime.tv_nsec != VNOVAL))
 	    ) {
 		return EROFS;
-//		error = udf_chtimes(vp, &vap->va_atime, &vap->va_mtime,
-//		    &vap->va_birthtime, vap->va_vaflags, cred);
+/*		error = udf_chtimes(vp, &vap->va_atime, &vap->va_mtime, */
+/*		    &vap->va_birthtime, vap->va_vaflags, cred); */
 	}
-//	VN_KNOTE(vp, NOTE_ATTRIB);
+/*	VN_KNOTE(vp, NOTE_ATTRIB); */
 
 	return error;
 }
@@ -1280,8 +1254,6 @@ udf_setattr(struct vop_setattr_args *ap)
 static int
 udf_pathconf(struct vop_pathconf_args *ap)
 {
-	printf("%s ran\n", __func__);
-
 	uint32_t bits;
 
 	switch (ap->a_name) {
@@ -1326,11 +1298,9 @@ udf_pathconf(struct vop_pathconf_args *ap)
 static int
 udf_open(struct vop_open_args *ap)
 {
-	printf("%s ran\n", __func__);
-
 	struct udf_node *udf_node;
 	off_t file_size;
-	//int flags;
+	/* int flags; */
 
 	udf_node = VTOI(ap->a_vp);
 
@@ -1338,8 +1308,8 @@ udf_open(struct vop_open_args *ap)
 	 * Files marked append-only must be opened for appending.
 	 * TODO: get chflags(2) flags from extened attribute.
 	 */
-	//if ((flags & APPEND) && (ap->a_mode & (FWRITE | O_APPEND)) == FWRITE)
-	//	return (EPERM);
+	/* if ((flags & APPEND) && (ap->a_mode & (FWRITE | O_APPEND)) == FWRITE)
+		return (EPERM); */
 
 	if (udf_node->fe)
 		file_size = le64toh(udf_node->fe->inf_len);
@@ -1391,8 +1361,6 @@ udf_close(void *v)
 static int
 udf_access(struct vop_access_args *ap)
 {
-	printf("%s ran\n", __func__);
-	
 	struct vnode *vp;
 	struct udf_node *udf_node;
 	accmode_t accmode;
@@ -1414,7 +1382,7 @@ udf_access(struct vop_access_args *ap)
 		 * filingsystem and bomb out if we're trying to write.
 		 */
 		if ((accmode & VWRITE) && (vp->v_mount->mnt_flag & MNT_RDONLY))
-			return EROFS; //check that this works
+			return EROFS; /* check that this works */
 		break;
 	case VBLK:
 	case VCHR:
@@ -1432,9 +1400,11 @@ udf_access(struct vop_access_args *ap)
 
 	/* noone may write immutable files */
 	/* TODO: get chflags(2) flags from extened attribute. */
-//	flags = 0;
-//	if ((mode & VWRITE) && (flags & IMMUTABLE))
-//		return EPERM;
+#if 0
+	flags = 0;
+	if ((mode & VWRITE) && (flags & IMMUTABLE))
+		return EPERM;
+#endif
 
 	mode = udf_getaccessmode(udf_node);
 
@@ -1757,8 +1727,6 @@ udf_symlink(void *v)
 int
 udf_readlink(struct vop_readlink_args *ap)
 {
-	printf("%s ran\n", __func__);
-
 	struct vnode *vp = ap->a_vp;
 	struct uio *uio = ap->a_uio;
 	struct pathcomp pathcomp;
@@ -2376,15 +2344,12 @@ udf_advlock(void *v)
 static int
 udf_ioctl(struct vop_ioctl_args *ap)
 {
-printf("%s ran\n", __func__);
-
 	return (ENOTTY);
 }
 
 static int
 udf_print(struct vop_print_args *ap)
 {
-printf("%s ran\n", __func__);
 	struct vnode *vp = ap->a_vp;
 	struct udf_node *udf_node = VTOI(vp);
 
@@ -2399,7 +2364,6 @@ printf("%s ran\n", __func__);
 static int
 udf_vptofh(struct vop_vptofh_args *ap)
 {
-printf("%s ran\n", __func__);
 	struct udf_node *udf_node = VTOI(ap->a_vp);
 	struct udf_fid *ufid = (struct udf_fid *)ap->a_fhp;
 

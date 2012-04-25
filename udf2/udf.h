@@ -66,9 +66,7 @@
 #define UDF_VAT_CHUNKSIZE	(64*1024)		/* picked */
 #define UDF_SYMLINKBUFLEN	(64*1024)		/* picked */
 
-#if 0
 #define UDF_DISC_SLACK		(128)			/* picked, at least 64 kb or 128 */
-#endif
 #define UDF_ISO_VRS_SIZE	(32*2048)		/* 32 ISO `sectors' */
 
 
@@ -149,8 +147,6 @@
 
 
 /* malloc pools */
-MALLOC_DECLARE(M_UDFMNT);
-MALLOC_DECLARE(M_UDFVOLD);
 MALLOC_DECLARE(M_UDFTEMP);
 
 //struct pool udf_node_pool;
