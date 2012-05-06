@@ -495,14 +495,6 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	ump->last_possible_vat_location = ump->session_end;
 
 	if (ump->flags & UDFMNT_KICONV && udf2_iconv) {
-#if 0
-		cs_disk = NULL;
-		error = vfs_getopt(mp->mnt_optnew, "cs_disk", (void **)&cs_disk, &len);
-		if (error != 0 || cs_disk[len-1] != '\0') {
-			error = EINVAL;
-			goto fail;
-		}
-#endif
 		cs_disk = "UTF-16BE";
 
 		cs_local = NULL;

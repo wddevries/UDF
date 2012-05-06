@@ -2741,7 +2741,7 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
 		CAM_DEBUG(periph->path, CAM_DEBUG_SUBTRACE, 
 			  ("trying to do UDFIOTEST\n"));
 		
-		udfreaddiscinfo(periph, usi);
+		error = udfreaddiscinfo(periph, usi);
 
 		break;
 		}

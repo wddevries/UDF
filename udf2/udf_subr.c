@@ -2078,10 +2078,10 @@ printf("*UDF Metadata Partition\n");
 	if (n_spar)
 		ump->lvreadwrite = UDF_REMAP_BLOCK;
 
+#if 0  
 	/*
 	 * Select our sheduler
 	 */
-#if 0  
 	ump->strategy = &udf_strat_rmw;
 	if (n_virt || (ump->discinfo.mmc_cur & MMC_CAP_PSEUDOOVERWRITE))
 		ump->strategy = &udf_strat_sequential;
@@ -3031,8 +3031,10 @@ udf_search_vat(struct udf_mount *ump, union udf_pmap *mapping)
 
 	/* start looking from the end of the range */
 	do {
-		if (vat_node) 
+		if (vat_node) {
 			udf_dispose_node(vat_node);
+			vat_node = NULL;
+		}
 
 		error = udf_read_phys_dscr(ump, vat_loc, M_UDFTEMP, &dscr);
 		if (!error && dscr) { /* dscr will be null if zeros were read */
@@ -3064,12 +3066,7 @@ udf_search_vat(struct udf_mount *ump, union udf_pmap *mapping)
 	} while (vat_loc >= early_vat_loc);
 
 	/* keep our VAT node around */
-	if (vat_node) {
-		/* UDF_SET_SYSTEMFILE(vat_node->vnode);*/
-		ump->vat_node = vat_node;
-		/* vhold(vat_node->vnode);*/
-		/* vput(vat_node->vnode);*/
-	}
+	ump->vat_node = vat_node;
 
 	return error;
 }
