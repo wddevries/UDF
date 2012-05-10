@@ -41,8 +41,6 @@
 #include <sys/unistd.h> /* udf_pathconf */
 #include <sys/bio.h>
 
-#include <fs/fifofs/fifo.h> /* fifo_printinfo */
-
 #include "ecma167-udf.h"
 #include "udf.h"
 #include "udf_subr.h"

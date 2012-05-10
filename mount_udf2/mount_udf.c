@@ -233,18 +233,20 @@ getlastblock(char *dev, struct udf_session_info *usi, int session_num)
 	int fd, error;
 	unsigned int out;
 	fd = open(dev, O_RDONLY, 0);
-	
+
 	if (fd < 0)
 		err(1, "open");
-	
+
 	bzero(usi, sizeof(struct udf_session_info));
 	usi->session_num = session_num;
 	error = ioctl(fd, UDFIOTEST, usi);
-	if (error != 0 && session_num > 1) {
-		warn("This device does not support sessions.");
-		//err(2, "ioctl");
+	if (error != 0) {
+		if (session_num == 0)
+			warn("This device not not support sessions");
+		else
+			err(2, "This device does not support sessions");
 	}
-	
+
 	close(fd);
 }
 
