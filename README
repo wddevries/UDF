@@ -1,0 +1,16 @@
+INSTALLATION:
+1. Rebuild and install kernel with 'driver.patch'.  This will enable mount_udf2
+to read session information from DVD devices.  CD devices are not supported 
+yet.  (The file system will work with decreased functionality without this
+step.)
+
+2. Build and install UDF2 file system. Run "make && make install" in 'udf2', 
+'udf2_iconv', and then 'mount_udf2'.  
+
+NOTE: The 'driver' directory does not contain anything to be build.  It was 
+used when developing the 'driver.patch' file.
+
+REMAINING WORK ITEMS:
+* Fix udf_bmap_translate not to return UDF_TRANS_ZERO and UDF_TRANS_INTERN as 
+  sector numbers.
+* Are allocation extents handled uniformly?

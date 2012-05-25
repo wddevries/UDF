@@ -1861,9 +1861,6 @@ udf_process_vds(struct udf_mount *ump) {
 	const char *check_name;
 	uint8_t *pmap_pos;
 
-	if (ump == NULL)
-		return ENOENT;
-
 	/* we need at least one primary and one logical volume descriptor */
 	if ((ump->primary_vol == NULL) || (ump->logical_vol) == NULL)
 		return EINVAL;
@@ -1893,16 +1890,14 @@ Check that character set is correct?
 		return EINVAL;
 	}
 
-	/* retrieve logical volume integrity sequence */
-	error = udf_retrieve_lvint(ump);
-
 	/*
 	 * We need at least one logvol integrity descriptor recorded.  Note
 	 * that its OK to have an open logical volume integrity here. The VAT
 	 * will close/update the integrity.
 	 */
-	if (ump->logvol_integrity == NULL)
-		return EINVAL;
+	error = udf_retrieve_lvint(ump);
+	if (error != 0)
+		return EINVAL; // previously it always returned this on error.
 
 	/* process derived structures */
 	n_pm   = le32toh(ump->logical_vol->n_pm);   /* num partmaps         */
@@ -2679,10 +2674,12 @@ udf_vat_read(struct udf_node *vat_node, uint8_t *blob, int size, uint32_t offset
 {
 	struct udf_mount *ump = vat_node->ump;
 
+/*	mutex_enter(&ump->allocate_mutex); */
 	if (offset + size > ump->vat_offset + ump->vat_entries * 4)
 		return EINVAL;
-
 	memcpy(blob, ump->vat_table + offset, size);
+/*	mutex_exit(&ump->allocate_mutex); */
+
 	return 0;
 }
 
@@ -2893,12 +2890,15 @@ udf_check_for_vat(struct udf_node *vat_node)
 		((vat_length + UDF_VAT_CHUNKSIZE-1) / UDF_VAT_CHUNKSIZE)
 			* UDF_VAT_CHUNKSIZE;
 
-	vat_table = malloc(vat_table_alloc_len, M_UDFTEMP, M_WAITOK); /*M_CANFAIL | was removed from third arg */
+	vat_table = malloc(vat_table_alloc_len, M_UDFTEMP, M_WAITOK); 
+#if 0
+	/*M_CANFAIL was removed from third arg */
 	if (vat_table == NULL) {
 		printf("allocation of %d bytes failed for VAT\n",
 			vat_table_alloc_len);
 		return ENOMEM;
 	}
+#endif
 
 	/* allocate piece to read in head or tail of VAT file */
 	raw_vat = malloc(sector_size, M_UDFTEMP, M_WAITOK);

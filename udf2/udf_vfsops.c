@@ -124,6 +124,18 @@ free_udf_mountinfo(struct mount *mp)
 
 	ump = VFSTOUDF(mp);
 	if (ump) {
+		/* VAT partition support */
+		if (ump->vat_node)
+			udf_dispose_node(ump->vat_node);
+
+		/* Metadata partition support */
+		if (ump->metadata_node)
+			udf_dispose_node(ump->metadata_node);
+		if (ump->metadatamirror_node)
+			udf_dispose_node(ump->metadatamirror_node);
+		if (ump->metadatabitmap_node)
+			udf_dispose_node(ump->metadatabitmap_node);
+
 		/* clear our data */
 		for (i = 0; i < UDF_ANCHORS; i++)
 			MPFREE(ump->anchors[i], M_UDFTEMP);
@@ -162,35 +174,6 @@ free_udf_mountinfo(struct mount *mp)
 #undef MPFREE
 
 /* --------------------------------------------------------------------- */
-
-/* if the system nodes exist, release them */
-static void
-udf_release_system_nodes(struct mount *mp)
-{
-	struct udf_mount *ump = VFSTOUDF(mp);
-
-	/* if we haven't even got an ump, dont bother */
-	if (!ump)
-		return;
-
-	/* VAT partition support */
-	if (ump->vat_node)
-		udf_dispose_node(ump->vat_node);
-
-	/* Metadata partition support */
-	if (ump->metadata_node)
-		udf_dispose_node(ump->metadata_node);
-	if (ump->metadatamirror_node)
-		udf_dispose_node(ump->metadatamirror_node);
-	if (ump->metadatabitmap_node)
-		udf_dispose_node(ump->metadatabitmap_node);
-
-#if 0
-	/* This flush should NOT write anything nor allow any node to remain */
-	if (vflush(ump->vfs_mountp, NULLVP, 0) != 0)
-		panic("Failure to flush UDF system vnodes\n");
-#endif
-}
 
 
 static int
@@ -343,9 +326,6 @@ udf_unmount(struct mount *mp, int mntflags)
 #endif
 #endif
 
-	/* NOTE release system nodes should NOT write anything */
-	udf_release_system_nodes(mp);
-
 #if 0
 	/* finalise disc strategy */
 	udf_discstrat_finish(ump);
@@ -395,15 +375,17 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	struct cdev *dev;
 	struct udf_mount     *ump = NULL;
 	int    num_anchors, error, len, *udf_flags;
-	uint32_t sector_size, bshift, logvol_integrity; /*lb_size,*/
+	uint32_t bshift, logvol_integrity; /*lb_size,*/
 	char *cs_disk, *cs_local;
 	void *optdata;
 
+#if 0
 	/* flush out any old buffers remaining from a previous use. */
-	/*if ((error = vinvalbuf(devvp, V_SAVE, l->l_cred, l, 0, 0)))
-		return error; */
+	if ((error = vinvalbuf(devvp, V_SAVE, l->l_cred, l, 0, 0)))
+		return error;
+#endif
 
-	/* Open a consumer.  This seems to setup the bufobj used later. */
+	/* Open a consumer. */
 	dev = devvp->v_rdev;
 	dev_ref(dev);
 	DROP_GIANT();
@@ -415,16 +397,8 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	if (error)
 		goto fail;
 
-	/* allocate udf part of mount structure; malloc always succeeds */
-	ump = malloc(sizeof(struct udf_mount), M_UDFTEMP, M_WAITOK | M_ZERO);
-	if (ump == NULL) {
-		printf("Memory allocation error for udf_mount struct.");
-		error = ENOMEM;
-		goto fail;
-	}
 
 	/* setup basic mount information */
-	mp->mnt_data = ump;
 	mp->mnt_stat.f_fsid.val[0] = dev2udev(devvp->v_rdev);
 	mp->mnt_stat.f_fsid.val[1] = mp->mnt_vfc->vfc_typenum;
 	mp->mnt_stat.f_namemax = UDF_MAX_NAMELEN;
@@ -438,8 +412,10 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 		MNTK_EXTENDED_SHARED;
 	MNT_IUNLOCK(mp);
 
-	/* init locks */
+	ump = malloc(sizeof(struct udf_mount), M_UDFTEMP, M_WAITOK | M_ZERO);
+
 #if 0
+	/* init locks */
 	mutex_init(&ump->logvol_mutex, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&ump->ihash_lock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&ump->get_node_lock, MUTEX_DEFAULT, IPL_NONE);
@@ -509,26 +485,21 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 		udf2_iconv->open(cs_disk, cs_local, &ump->iconv_l2d);
 #endif
 	}
-/*	if ((error = udf_update_discinfo(ump))) {
-		printf("UDF mount: error inspecting fs node\n");
-		return error;
-	}*/
 
 	/* inspect sector size */
-	sector_size = cp->provider->sectorsize;
-	ump->sector_size = sector_size;
+	ump->sector_size = cp->provider->sectorsize;
 
 	bshift = 1;
-	while ((1 << bshift) < sector_size)
+	while ((1 << bshift) < ump->sector_size)
 		bshift++;
-	if ((1 << bshift) != sector_size) {
+	if ((1 << bshift) != ump->sector_size) {
 		printf("UDF mount: "
 		       "hit implementation fence on sector size\n");
 		return EIO;
 	}
 
 	/* temporary check to overcome sectorsize >= 8192 bytes panic */
-	if (sector_size >= 8192) {
+	if (ump->sector_size >= 8192) {
 		printf("UDF mount: "
 			"hit implementation limit, sectorsize to big\n");
 		return EIO;
@@ -657,7 +628,6 @@ fail:
 	}
 	dev_rel(dev);
 	if (ump != NULL) {
-		udf_release_system_nodes(mp);
 		/*udf_discstrat_finish(VFSTOUDF(mp)); */
 		free_udf_mountinfo(mp);
 	}

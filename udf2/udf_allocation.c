@@ -481,12 +481,9 @@ translate_again:
 			return EINVAL;
 
 		/* lookup in virtual allocation table file */
-/*		mutex_enter(&ump->allocate_mutex); */
 		error = udf_vat_read(ump->vat_node,
 				(uint8_t *) &udf_rw32_lbmap, 4,
 				ump->vat_offset + lb_num * 4);
-/*		mutex_exit(&ump->allocate_mutex); */
-
 		if (error)
 			return error;
 
@@ -524,7 +521,7 @@ translate_again:
 		*extres = ump->sparable_packet_size - lb_rel;
 		return 0;
 	case UDF_VTOP_TYPE_META :
-printf("meta hell\n");
+printf("Metadata Partition Translated\n");
 		/* we have to look into the file's allocation descriptors */
 
 		/* use metadatafile allocation mutex */
