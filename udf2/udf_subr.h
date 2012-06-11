@@ -99,7 +99,7 @@ int udf_translate_vtop(struct udf_mount *ump, struct long_ad *icb_loc,
 //void udf_translate_vtop_list(struct udf_mount *ump, uint32_t sectors,
 //		uint16_t vpart_num, uint64_t *lmapping, uint64_t *pmapping);
 int udf_bmap_translate(struct udf_node *udf_node, uint32_t block, 
-		uint64_t *lsector, uint32_t *maxblks);
+		int *exttype, uint64_t *lsector, uint32_t *maxblks);
 //int udf_translate_file_extent(struct udf_node *node,
 //		uint32_t from, uint32_t num_lb, uint64_t *map);
 void udf_get_adslot(struct udf_node *udf_node, int slot, struct long_ad *icb, int *eof);
@@ -191,7 +191,7 @@ uint32_t udf_getaccessmode(struct udf_node *node);
 //void udf_getownership(struct udf_node *udf_node, uid_t *uidp, gid_t *gidp);
 //void udf_setownership(struct udf_node *udf_node, uid_t uid, gid_t gid);
 
-void udf_to_unix_name(struct udf_mount *ump, char *result, int result_len, char *id, int len);
+void udf_to_unix_name(struct udf_mount *ump, char *result, int result_len, uint8_t *id, int len);
 //void unix_to_udf_name(char *result, uint8_t *result_len, char const *name, int name_len, struct charspec *chsp);
 
 void udf_timestamp_to_timespec(struct udf_mount *ump, struct timestamp *timestamp, struct timespec *timespec);

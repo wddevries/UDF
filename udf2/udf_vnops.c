@@ -419,7 +419,7 @@ udf_bmap(struct vop_bmap_args /* {
 	struct vnode  *vp  = ap->a_vp;	/* our node	*/
 	struct udf_node *udf_node = VTOI(vp);
 	uint64_t lsector;
-	int error;
+	int exttype, error;
 	uint32_t maxblks;
 
 	if (ap->a_bop != NULL)
@@ -429,14 +429,15 @@ udf_bmap(struct vop_bmap_args /* {
 		return 0;
 
 	/* get logical block and run */
-	error = udf_bmap_translate(udf_node, ap->a_bn, &lsector, &maxblks);
+	error = udf_bmap_translate(udf_node, ap->a_bn, &exttype, &lsector,
+	    &maxblks);
 	if (error)
 		return error;
 
 	/* convert to dev blocks */
-	if (lsector == UDF_TRANS_INTERN)
+	if (exttype == UDF_TRAN_INTERN)
 		return EOPNOTSUPP;
-	else if (lsector == UDF_TRANS_ZERO)
+	else if (exttype == UDF_TRAN_ZERO)
 		*ap->a_bnp = -1; /* zero the buffer */
 	else
 		*ap->a_bnp = lsector * (udf_node->ump->sector_size/DEV_BSIZE);
@@ -460,7 +461,7 @@ udf_strategy(struct vop_strategy_args *ap)
 	struct udf_node *udf_node = VTOI(vp);
 	struct bufobj *bo = udf_node->ump->bo;
 	uint64_t lsector;
-	int error;
+	int exttype, error;
 	uint32_t lb_size, from, sectors;
 	uint32_t maxblks;
 
@@ -473,7 +474,8 @@ udf_strategy(struct vop_strategy_args *ap)
 	sectors = bp->b_bcount / lb_size;
 
 	/* get logical block and run */
-	error = udf_bmap_translate(udf_node, bp->b_lblkno, &lsector, &maxblks);
+	error = udf_bmap_translate(udf_node, bp->b_lblkno, &exttype, &lsector,
+	    &maxblks);
 	if (error) {
 		bp->b_error  = error;
 		bufdone(bp);
@@ -481,11 +483,11 @@ udf_strategy(struct vop_strategy_args *ap)
 	}
 
 	if (bp->b_iocmd & BIO_READ) {
-		if (lsector == UDF_TRANS_ZERO) {
+		if (exttype == UDF_TRAN_ZERO) {
 			memset(bp->b_data, 0, lb_size);
 			if ((bp->b_flags & B_ASYNC) == 0)
 				bufwait(bp);
-		} else if (lsector == UDF_TRANS_INTERN) {
+		} else if (exttype == UDF_TRAN_INTERN) {
 			error = udf_read_internal(udf_node, (uint8_t *) bp->b_data);
 			if (error)
 				bp->b_error  = error;
@@ -530,7 +532,7 @@ udf_readdir(struct vop_readdir_args /* {
 	int ncookies, acookies;
 	int error;
 	uint32_t lb_size;
-	char *fid_name;
+	uint8_t *fid_name;
 	
 	uio = ap->a_uio;
 	vp = ap->a_vp;
@@ -630,8 +632,7 @@ udf_readdir(struct vop_readdir_args /* {
 				cookie = 2;
 			}
 			else {
-				fid_name = (char *) fid->data + 
-				    le16toh(fid->l_iu);
+				fid_name = fid->data + le16toh(fid->l_iu);
 				udf_to_unix_name(ump, dirent->d_name, MAXNAMLEN,
 				    fid_name, fid->l_fi);
 				dirent->d_namlen = strlen(dirent->d_name);
@@ -710,7 +711,7 @@ udf_cachedlookup(struct vop_cachedlookup_args *ap)
 	int nameiop, islastcn, mounted_ro, numpasses;
 	int unix_len, ltype;
 	int error = 0;
-	char *fid_name;
+	uint8_t *fid_name;
 	char *unix_name;
 
 	dir_node = VTOI(dvp);
@@ -772,7 +773,7 @@ lookuploop:
 			}
 		}
 		else {
-			fid_name = (char *) fid->data + le16toh(fid->l_iu);
+			fid_name = fid->data + le16toh(fid->l_iu);
 			udf_to_unix_name(ump, unix_name, MAXNAMLEN, fid_name,
 			    fid->l_fi);
 			unix_len = strlen(unix_name);

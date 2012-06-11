@@ -257,7 +257,7 @@ udf_read_node(struct udf_node *unode, uint8_t *blob, off_t start, int length)
 	struct vnode *devvp = unode->ump->devvp;
 	struct buf *bp; /* *buf, *nestbuf, ; */
 	uint64_t file_size, lsect;
-	int icbflags, addr_type, error = 0;
+	int icbflags, addr_type, exttype, error = 0;
 	uint32_t sector_size, blkinsect, fileblk, fileblkoff, numlsect, numb;
 	uint8_t  *pos;
 
@@ -286,17 +286,18 @@ udf_read_node(struct udf_node *unode, uint8_t *blob, off_t start, int length)
 	}
 
 	while (length) {
-		error = udf_bmap_translate(unode, fileblk, &lsect, &numlsect);
+		error = udf_bmap_translate(unode, fileblk, &exttype, &lsect,
+		    &numlsect);
 		if (error)
 			return error;
 
-		if (lsect == UDF_TRANS_ZERO) {
+		if (exttype == UDF_TRAN_ZERO) {
 			numb = min(length, sector_size * numlsect - fileblkoff);
 			memset(blob, 0, numb);
 			length -= numb;
 			blob += numb;
 			fileblkoff = 0;
-		} else if (lsect == UDF_TRANS_INTERN) {
+		} else if (exttype == UDF_TRAN_INTERN) {
 			return EDOOFUS;
 		} else {
 			while (numlsect > 0) {

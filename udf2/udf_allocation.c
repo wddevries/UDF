@@ -606,12 +606,11 @@ udf_translate_vtop_list(struct udf_mount *ump, uint32_t sectors,
 
 /* --------------------------------------------------------------------- */
 /* 
- *This is a simplified version of the following function. It is used in 
- * bmap.
+ * This is a simplified version of the udf_translate_file_extent function. 
  */
 int
 udf_bmap_translate(struct udf_node *udf_node, uint32_t block, 
-		   uint64_t *lsector, uint32_t *maxblks)
+		   int *exttype, uint64_t *lsector, uint32_t *maxblks)
 {
 	struct udf_mount *ump;
 	struct icb_tag *icbtag;
@@ -621,6 +620,7 @@ udf_bmap_translate(struct udf_node *udf_node, uint32_t block,
 	uint32_t transsec32, lb_size, ext_offset, lb_num, len;
 	uint32_t ext_remain, translen;
 	uint16_t vpart_num;
+
 
 	if (!udf_node)
 		return ENOENT;
@@ -643,7 +643,7 @@ udf_bmap_translate(struct udf_node *udf_node, uint32_t block,
 
 	/* do the work */
 	if (addr_type == UDF_ICB_INTERN_ALLOC) {
-		*lsector = UDF_TRANS_INTERN;
+		*exttype = UDF_TRAN_INTERN;
 		*maxblks = 1;
 		UDF_UNLOCK_NODE(udf_node, 0);
 		return 0;
@@ -691,10 +691,11 @@ udf_bmap_translate(struct udf_node *udf_node, uint32_t block,
 	switch (flags) {
 	case UDF_EXT_FREE :
 	case UDF_EXT_ALLOCATED_BUT_NOT_USED :
-		*lsector = UDF_TRANS_ZERO;
+		*exttype = UDF_TRAN_ZERO;
 		*maxblks = ext_remain;
 		break;
 	case UDF_EXT_ALLOCATED :
+		*exttype = UDF_TRAN_EXTERNAL;
 		t_ad.loc.lb_num   = htole32(lb_num);
 		t_ad.loc.part_num = htole16(vpart_num);
 		error = udf_translate_vtop(ump,
