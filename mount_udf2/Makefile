@@ -2,7 +2,7 @@
 
 PROG=	mount_udf2
 SRCS=	mount_udf.c getmntopts.c
-MAN=	mount_udf.8
+MAN=	mount_udf2.8
 DPADD=	${LIBKICONV}
 LDADD=	-lkiconv
 
