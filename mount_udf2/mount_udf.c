@@ -227,6 +227,37 @@ set_charset(char **cs_disk, char **cs_local, const char *localcs)
 	return (0);
 }
 
+/*
+unsigned int
+getlastblock_other(char *dev)
+{
+	int fd, error;
+	unsigned int out;
+	struct ioc_read_toc_entry t;
+	struct cd_toc_entry te;
+
+	fd = open(dev, O_RDONLY, 0);
+	if (fd < 0)
+		err(1, "open");
+
+	t.address_format = CD_LBA_FORMAT;
+	t.starting_track = 0xaa; //CD_TRACK_LEADOUT;
+	t.data_len = sizeof(struct cd_toc_entry);
+	t.data = &te;
+
+	error = ioctl(fd, CDIOREADTOCENTRYS, &t);
+	if (error)
+		err(2, "ioctl");
+
+	close(fd);
+	out = (unsigned int)te.addr.lba;
+	out = be32toh(out);
+	printf("outout of ioctl: %d\n", (int)out);
+
+	return out;
+}
+*/
+
 static void
 getlastblock(char *dev, struct udf_session_info *usi, int session_num)
 {
@@ -278,6 +309,8 @@ static void
 usage(void)
 {
 	(void)fprintf(stderr,
-		"usage: mount_udf [-v] [-o options] [-C charset] [-s session] [-p] special node\n");
+		"usage: mount_udf [-v] [-o options] [-C charset] [-s session] special node\n");
+	(void)fprintf(stderr,
+		"usage: mount_udf [-p] [-s session] special\n");
 	exit(EX_USAGE);
 }

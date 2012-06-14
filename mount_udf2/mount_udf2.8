@@ -26,7 +26,7 @@
 .\"
 .\" $FreeBSD: src/sbin/mount_udf/mount_udf.8,v 1.6 2005/02/10 09:19:31 ru Exp $
 .\"
-.Dd March 23, 2002
+.Dd June 12, 2012
 .Dt MOUNT_UDF2 8
 .Os
 .Sh NAME
@@ -37,7 +37,12 @@
 .Op Fl v
 .Op Fl o Ar options
 .Op Fl C Ar charset
+.Op Fl s Ar session 
 .Ar special node
+.Nm
+.Op Fl p
+.Op Fl s Ar session 
+.Ar special
 .Sh DESCRIPTION
 The
 .Nm
@@ -62,6 +67,18 @@ Be verbose about mounting the UDF file system.
 Specify local
 .Ar charset
 to convert Unicode file names.
+.It Fl s Ar session
+Specify the 
+.Ar session
+to mount or display information about.
+This must be a positive integer greater than zero.  Valid values may be 
+determined using the
+.Fl p
+option.
+.It Fl p
+Print information about sessions on cd.  This option may be used to determine
+the number of sessions on the disk.  Sessions are numbered starting with 1, and
+by default information will be displayed for the largest non-empty session.
 .El
 .Sh SEE ALSO
 .Xr cdcontrol 1 ,
