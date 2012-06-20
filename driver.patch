@@ -1,5 +1,5 @@
 diff --git sys/cam/scsi/scsi_cd.c sys/cam/scsi/scsi_cd.c
-index 5e88a97..55ee959 100644
+index d45d49a..0d64578 100644
 --- sys/cam/scsi/scsi_cd.c
 +++ sys/cam/scsi/scsi_cd.c
 @@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
@@ -33,7 +33,7 @@ index 5e88a97..55ee959 100644
  static struct periph_driver cddriver =
  {
  	cdinit, "cd",
-@@ -2716,6 +2733,18 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
+@@ -2722,6 +2739,18 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
  
  		break;
  	}
@@ -52,7 +52,7 @@ index 5e88a97..55ee959 100644
  	default:
  		cam_periph_lock(periph);
  		error = cam_periph_ioctl(periph, cmd, addr, cderror);
-@@ -2735,6 +2764,417 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
+@@ -2741,6 +2770,406 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
  	return (error);
  }
  
@@ -102,20 +102,14 @@ index 5e88a97..55ee959 100644
 +			    featcode == 0x28)) /*MRW Formatted media*/
 +				cancelseq = 1;
 +
-+			if (featcode == 0x21) {
++			if (featcode == 0x21)
 +				linkblkpenalty = 0;
-+printf("linkblkpenalty set to %d\n", linkblkpenalty);
-+			}
 +		}
-+
-+printf("gch: %p, fg: %p\n", gch, fg);
-+printf("feature_code: %x, additional_len: %d, current %d, seqfeature: %d, cancelseq: %d\n", featcode, fg->additional_len, fg->byte3 & GC_CURRENT,  seqfeature, cancelseq);
 +
 +		datalen -= 4 + fg->additional_len;
 +		databuflen -= 4 + fg->additional_len;
 +		
 +		if (databuflen < 4) {
-+printf("cdgetconf again, sizeof gch+16: %ld\n", sizeof(*gch)+16);
 +			error = cdgetconf(periph, (u_int8_t *)gch, sizeof (*gch) + 16,
 +				GC_RT_ALLFEATURES, featcode + 1, /*sense_flags*/SF_NO_PRINT);
 +			if (error)
@@ -160,7 +154,8 @@ index 5e88a97..55ee959 100644
 +	uint32_t track_start_addr, track_size, free_blocks, nwa, lra;
 +	uint16_t track, sessret;
 +	uint8_t lsb, msb;
-+	int error, seqmedia, linkblkpenalty, lra_valid, nwa_valid;
++	int error, seqmedia, linkblkpenalty, lra_valid, nwa_valid, diskstate;
++	int sessionstatus;
 +
 +	/* Read get config and header data. */
 +	error = cdrecordedsequentially(periph, &seqmedia, &linkblkpenalty);
@@ -180,7 +175,15 @@ index 5e88a97..55ee959 100644
 +		goto out;
 +
 +	usi->num_sessions = rdi->num_sessions_lsb | (rdi->num_sessions_msb << 8);
-+printf("num_sessions: %d, session_num: %d\n", usi->num_sessions, usi->session_num);
++
++	diskstate = rdi->byte2 & 0x3;
++	sessionstatus = (rdi->byte2 >> 2) & 0x3;
++
++	// session is empty so, we don't want to read it.
++	if (diskstate < 2 && sessionstatus == 0 && 
++	    usi->session_num == 0 && usi->num_sessions > 1)
++		usi->session_num = usi->num_sessions - 1;
++
 +	if (usi->session_num == 0)
 +		usi->session_num = usi->num_sessions;
 +
@@ -190,8 +193,6 @@ index 5e88a97..55ee959 100644
 +	msb = rdi->last_track_last_session_msb;
 +	usi->num_tracks = ((msb << 8) | lsb) - usi->first_track + 1;
 +
-+printf("last_track_last_session: %u\n", (rdi->last_track_last_session_msb << 8) | rdi->last_track_last_session_lsb);
-+printf("first_track_last_session: %u\n", (rdi->first_track_last_session_msb << 8) | rdi->first_track_last_session_lsb);
 +
 +	usi->session_first_track = 0;
 +	usi->session_last_track = 0;
@@ -207,11 +208,9 @@ index 5e88a97..55ee959 100644
 +		error = cdreadtrackinfo(periph, (uint8_t *)ti, sizeof(*ti), 
 +	       			track, /*sense_flags*/SF_NO_PRINT);
 +		if (error != 0) {
-+printf("Damn an error!\n");
 +			goto out;
 +		}
 +		sessret = (ti->session_num_msb << 8) | ti->session_num_lsb;
-+printf("Trackno: %u, sessret: %u, actual track: %u\n", (ti->track_num_msb << 8) | ti->track_num_lsb, sessret, track);
 +		if (sessret == usi->session_num) {
 +			if (usi->session_first_track == 0) {
 +				usi->session_first_track = track;
@@ -231,33 +230,28 @@ index 5e88a97..55ee959 100644
 +	}
 +	
 +	if (usi->session_first_track == 0 || usi->session_last_track == 0) {
-+printf("Session not found\n");
 +		error = EINVAL;
 +		goto out;
 +	}
 +
 +	/* Calculate end address of session. */
 +	usi->session_end_addr = track_start_addr + track_size - free_blocks - 1;
-+printf("last address: %d, track_start_addr: %u, track_size: %u, free_blocks: %u\n", 
-+		usi->session_end_addr, track_start_addr, track_size, free_blocks);
-+	if (seqmedia == 1) {
-+printf("last_rec_valid: %d, last_recorded_addr: %u, next_writ_valid: %d, next_writable_addr: %u, linkblkpenalty: %u\n",
-+	lra_valid, lra, nwa_valid, nwa, linkblkpenalty);
++	if (seqmedia == 1)
 +		if (lra_valid != 0)
 +			usi->session_end_addr = lra;
 +		/*else if (next_writ_valid != 0)
 +			session_end_addr = next_writable_addr - linkblkpenalty;*/
-+	}
 +
 +	usi->sector_size = 2048;
++
 +	/* print the data */
-+	printf("data from session number %d\n", usi->session_num);
-+	printf("sector_size: %u\n", usi->sector_size); /* not sure the value can be anything different with cds or dvds */
-+	printf("num_tracks: %u\n", usi->num_tracks);
-+	printf("num_sessions: %u\n", usi->num_sessions);
-+	printf("first_track: %u\n", usi->first_track);
-+	printf("session first track: %u, last track %u\n", usi->session_first_track, usi->session_last_track);
-+	printf("session first address: %d, last address: %d\n", usi->session_start_addr, usi->session_end_addr);
++	//printf("data from session number %d\n", usi->session_num);
++	//printf("sector_size: %u\n", usi->sector_size); /* not sure the value can be anything different with cds or dvds */
++	//printf("num_tracks: %u\n", usi->num_tracks);
++	//printf("num_sessions: %u\n", usi->num_sessions);
++	//printf("first_track: %u\n", usi->first_track);
++	//printf("session first track: %u, last track %u\n", usi->session_first_track, usi->session_last_track);
++	//printf("session first address: %d, last address: %d\n", usi->session_start_addr, usi->session_end_addr);
 +out:
 +	cam_periph_unlock(periph);
 +	free(rdi, M_SCSICD);
@@ -356,7 +350,6 @@ index 5e88a97..55ee959 100644
 +	int error;
 +
 +	error = 0;
-+
 +	ccb = cdgetccb(periph, CAM_PRIORITY_NORMAL);
 +	csio = &ccb->csio;
 +
@@ -395,9 +388,7 @@ index 5e88a97..55ee959 100644
 +	union ccb *ccb;
 +	int error;
 +
-+printf("data ptr: %p, len %d, sense_flags: %u\n", data, len, sense_flags);
 +	error = 0;
-+
 +	ccb = cdgetccb(periph, CAM_PRIORITY_NORMAL);
 +	csio = &ccb->csio;
 +
@@ -434,9 +425,7 @@ index 5e88a97..55ee959 100644
 +	union ccb *ccb;
 +	int error;
 +
-+printf("data ptr: %p, len %d, trackno: %u, sense_flags: %u\n", data, len, trackno, sense_flags);
 +	error = 0;
-+
 +	ccb = cdgetccb(periph, CAM_PRIORITY_NORMAL);
 +	csio = &ccb->csio;
 +
@@ -470,11 +459,6 @@ index 5e88a97..55ee959 100644
  static void
  cdprevent(struct cam_periph *periph, int action)
  {
-@@ -4273,3 +4713,4 @@ scsi_read_dvd_structure(struct ccb_scsiio *csio, u_int32_t retries,
- 		      sizeof(*scsi_cmd),
- 		      timeout);
- }
-+
 diff --git sys/cam/scsi/scsi_cd.h sys/cam/scsi/scsi_cd.h
 index f502d66..9933b0c 100644
 --- sys/cam/scsi/scsi_cd.h
