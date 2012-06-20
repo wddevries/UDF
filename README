@@ -7,9 +7,6 @@ step.)
 2. Build and install UDF2 file system. Run "make && make install" in 'udf2', 
 'udf2_iconv', and then 'mount_udf2'.  
 
-NOTE: The 'driver' directory does not contain anything to be build.  It was 
-used when developing the 'driver.patch' file.
-
 REMAINING WORK ITEMS:
  * Add support for CD devices to driver.patch
  * Extensive testing, including with metadata partition disk.
