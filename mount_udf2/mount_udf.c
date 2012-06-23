@@ -73,7 +73,7 @@ struct mntopt mopts[] = {
 };
 
 static int set_charset(char **, char **, const char *);
-static void getlastblock(char *dev, struct udf_session_info *usi, 
+static void get_session_info(char *dev, struct udf_session_info *usi, 
    			 int session_num);
 static void usage(void);
 static void print_session_info(char *dev, int session_num);
@@ -144,7 +144,7 @@ main(int argc, char **argv)
 	/*
 	 * Get session info from device
 	 */
-	getlastblock(dev, &usi, session_num);
+	get_session_info(dev, &usi, session_num);
 
 	/*
 	 * UDF file systems are not writeable.
@@ -227,18 +227,13 @@ set_charset(char **cs_disk, char **cs_local, const char *localcs)
 	return (0);
 }
 
-/*
-unsigned int
-getlastblock_other(char *dev)
+static void
+get_session_info_other(int fd, struct udf_session_info *usi)
 {
-	int fd, error;
+	int error;
 	unsigned int out;
 	struct ioc_read_toc_entry t;
 	struct cd_toc_entry te;
-
-	fd = open(dev, O_RDONLY, 0);
-	if (fd < 0)
-		err(1, "open");
 
 	t.address_format = CD_LBA_FORMAT;
 	t.starting_track = 0xaa; //CD_TRACK_LEADOUT;
@@ -249,17 +244,16 @@ getlastblock_other(char *dev)
 	if (error)
 		err(2, "ioctl");
 
-	close(fd);
-	out = (unsigned int)te.addr.lba;
-	out = be32toh(out);
-	printf("outout of ioctl: %d\n", (int)out);
+	usi.session_start_addr = 0;
+	usi.session_end_addr = (unsigned int)te.addr.lba;
+	usi.session_end_addr = be32toh(usi.session_end_addr);
+printf("outout of ioctl: %d\n", (int)usi.session_end_addr);
 
 	return out;
 }
-*/
 
 static void
-getlastblock(char *dev, struct udf_session_info *usi, int session_num)
+get_session_info(char *dev, struct udf_session_info *usi, int session_num)
 {
 	int fd, error;
 	unsigned int out;
@@ -272,9 +266,10 @@ getlastblock(char *dev, struct udf_session_info *usi, int session_num)
 	usi->session_num = session_num;
 	error = ioctl(fd, UDFIOTEST, usi);
 	if (error != 0) {
-		if (session_num == 0)
+		if (session_num == 0) {
 			warn("This device not not support sessions");
-		else
+			get_session_info_other(dev, usi)
+		} else
 			err(2, "This device does not support sessions");
 	}
 
@@ -287,7 +282,7 @@ print_session_info(char *dev, int session_num)
 	struct udf_session_info usi;
 
 	rmslashes(dev, dev);
-	getlastblock(dev, &usi, session_num);
+	get_session_info(dev, &usi, session_num);
 
 
 	printf("session_num: %u\n", usi.session_num);
