@@ -244,10 +244,10 @@ get_session_info_other(int fd, struct udf_session_info *usi)
 	if (error)
 		err(2, "ioctl");
 
-	usi.session_start_addr = 0;
-	usi.session_end_addr = (unsigned int)te.addr.lba;
-	usi.session_end_addr = be32toh(usi.session_end_addr);
-printf("outout of ioctl: %d\n", (int)usi.session_end_addr);
+	usi->session_start_addr = 0;
+	usi->session_end_addr = (unsigned int)te.addr.lba;
+	usi->session_end_addr = be32toh(usi->session_end_addr);
+printf("outout of ioctl: %d\n", (int)usi->session_end_addr);
 
 	return out;
 }
