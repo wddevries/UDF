@@ -228,10 +228,9 @@ set_charset(char **cs_disk, char **cs_local, const char *localcs)
 }
 
 static void
-get_session_info_other(int fd, struct udf_session_info *usi)
+get_session_info_cd(int fd, struct udf_session_info *usi)
 {
 	int error;
-	unsigned int out;
 	struct ioc_read_toc_entry t;
 	struct cd_toc_entry te;
 
@@ -241,15 +240,16 @@ get_session_info_other(int fd, struct udf_session_info *usi)
 	t.data = &te;
 
 	error = ioctl(fd, CDIOREADTOCENTRYS, &t);
-	if (error)
-		err(2, "ioctl");
-
+	if (error) {
+		warn("This device does not support locating the last written block.");
+		usi->session_end_addr = 0;
+	} else {
+		usi->session_end_addr = (unsigned int)te.addr.lba;
+		usi->session_end_addr = be32toh(usi->session_end_addr);
+	}
 	usi->session_start_addr = 0;
-	usi->session_end_addr = (unsigned int)te.addr.lba;
-	usi->session_end_addr = be32toh(usi->session_end_addr);
-printf("outout of ioctl: %d\n", (int)usi->session_end_addr);
 
-	return out;
+	return;
 }
 
 static void
@@ -267,10 +267,10 @@ get_session_info(char *dev, struct udf_session_info *usi, int session_num)
 	error = ioctl(fd, UDFIOTEST, usi);
 	if (error != 0) {
 		if (session_num == 0) {
-			warn("This device not not support sessions");
-			get_session_info_other(dev, usi)
+			warn("This device does not support multiple sessions");
+			get_session_info_cd(fd, usi);
 		} else
-			err(2, "This device does not support sessions");
+			err(2, "This device does not support multiple sessions");
 	}
 
 	close(fd);
