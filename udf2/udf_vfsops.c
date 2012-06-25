@@ -1,4 +1,5 @@
 /*-
+ * Copyright (c) 2012 Will DeVries
  * Copyright (c) 2006, 2008 Reinoud Zandijk
  * All rights reserved.
  * 
@@ -468,6 +469,8 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	}
 	ump->session_end = *(uint32_t *)optdata;
 
+	/* These could hold different in the future. */
+	ump->first_possible_vat_location = ump->session_start;
 	ump->last_possible_vat_location = ump->session_end;
 
 	if (ump->flags & UDFMNT_KICONV && udf2_iconv) {

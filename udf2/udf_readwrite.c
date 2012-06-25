@@ -1,4 +1,5 @@
 /*-
+ * Copyright (c) Will DeVries
  * Copyright (c) 2007, 2008 Reinoud Zandijk
  * All rights reserved.
  * 

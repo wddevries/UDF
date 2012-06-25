@@ -3006,7 +3006,7 @@ out:
 /* --------------------------------------------------------------------- */
 
 static int
-udf_search_vat(struct udf_mount *ump, union udf_pmap *mapping)
+udf_search_vat(struct udf_mount *ump)
 {
 	union dscrptr *dscr;
 	/* struct vnode *vp; */
@@ -3019,12 +3019,17 @@ udf_search_vat(struct udf_mount *ump, union udf_pmap *mapping)
 	uint8_t file_type;
 
 	vat_node = NULL;
-	
-	/* mapping info not needed */
-	mapping = mapping;
 
+	/* If we don't know the end of the session, we can not search for the 
+	VAT. */
+	if (ump->last_possible_vat_location == 0)
+		return ENOENT;
+	
 	vat_loc = ump->last_possible_vat_location;
-	early_vat_loc = vat_loc - 256;	/* 8 blocks of 32 sectors */
+	if (vat_loc > 256)
+		early_vat_loc = vat_loc - 256; /* 8 blocks of 32 sectors */
+	else
+		early_vat_loc = 0;
 
 	early_vat_loc = MAX(early_vat_loc, ump->first_possible_vat_location);
 	late_vat_loc  = vat_loc + 1024;
@@ -3214,7 +3219,7 @@ udf_read_vds_tables(struct udf_mount *ump)
 			break;
 		case UDF_VTOP_TYPE_VIRT :
 			/* search and load VAT */
-			error = udf_search_vat(ump, mapping);
+			error = udf_search_vat(ump);
 			if (error)
 				return ENOENT;
 			break;
