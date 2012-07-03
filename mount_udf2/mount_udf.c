@@ -2,6 +2,7 @@
  * Copyright (c) 1992, 1993, 1994
  *      The Regents of the University of California.  All rights reserved.
  * Copyright (c) 2002 Scott Long
+ * Copyright (c) 2012 Will DeVries
  *
  * This code is derived from software contributed to Berkeley
  * by Pace Willisson (pace@blitz.com).  The Rock Ridge Extension

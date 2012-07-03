@@ -1,4 +1,5 @@
 /*-
+ * Copyright (c) 2012 Will DeVries
  * Copyright (c) 2006, 2008 Reinoud Zandijk
  * All rights reserved.
  * 
@@ -172,13 +173,13 @@ udf_update_discinfo(struct udf_mount *ump)
 	error = VOP_IOCTL(devvp, MMCGETDISCINFO, di, FKIOCTL, NOCRED);
 	if (error == 0) {
 		udf_dump_discinfo(ump);
-		return 0;
+		return (0);
 	}
 
 	/* disc partition support */
 	error = VOP_IOCTL(devvp, DIOCGPART, &dpart, FREAD, NOCRED);
 	if (error)
-		return ENODEV;
+		return (ENODEV);
 
 	/* set up a disc info profile for partitions */
 	di->mmc_profile		= 0x01;	/* disc type */
@@ -204,7 +205,7 @@ udf_update_discinfo(struct udf_mount *ump)
 	di->first_track_last_session = di->last_track_last_session = 1;
 
 	udf_dump_discinfo(ump);
-	return 0;
+	return (0);
 }
 
 
@@ -221,12 +222,12 @@ udf_update_trackinfo(struct udf_mount *ump, struct mmc_trackinfo *ti)
 	if (class != MMC_CLASS_DISC) {
 		/* tracknr specified in struct ti */
 		error = VOP_IOCTL(devvp, MMCGETTRACKINFO, ti, FKIOCTL, NOCRED);
-		return error;
+		return (error);
 	}
 
 	/* disc partition support */
 	if (ti->tracknr != 1)
-		return EIO;
+		return (EIO);
 
 	/* create fake ti (TODO check for resized vnds) */
 	ti->sessionnr  = 1;
@@ -244,7 +245,7 @@ udf_update_trackinfo(struct udf_mount *ump, struct mmc_trackinfo *ti)
 	ti->last_recorded = ti->next_writable;
 	ti->free_blocks   = 0;
 
-	return 0;
+	return (0);
 }
 
 
@@ -255,7 +256,7 @@ udf_setup_writeparams(struct udf_mount *ump)
 	int error;
 
 	if (ump->discinfo.mmc_class == MMC_CLASS_DISC)
-		return 0;
+		return (0);
 
 	/*
 	 * only CD burning normally needs setting up, but other disc types
@@ -286,7 +287,7 @@ udf_setup_writeparams(struct udf_mount *ump)
 		error = VOP_IOCTL(ump->devvp, MMCSETUPWRITEPARAMS,
 				&mmc_writeparams, FKIOCTL, NOCRED);
 	}
-	return error;
+	return (error);
 }
 
 
@@ -298,11 +299,11 @@ udf_synchronise_caches(struct udf_mount *ump)
 	DPRINTF(CALL, ("udf_synchronise_caches()\n"));
 
 	if (ump->vfs_mountp->mnt_flag & MNT_RDONLY)
-		return 0;
+		return (0);
 
 	/* discs are done now */
 	if (ump->discinfo.mmc_class == MMC_CLASS_DISC)
-		return 0;
+		return (0);
 
 	memset(&mmc_op, 0, sizeof(struct mmc_op));
 	mmc_op.operation = MMC_OP_SYNCHRONISECACHE;
@@ -310,7 +311,7 @@ udf_synchronise_caches(struct udf_mount *ump)
 	/* ignore return code */
 	(void) VOP_IOCTL(ump->devvp, MMCOP, &mmc_op, FKIOCTL, NOCRED);
 
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -355,7 +356,7 @@ udf_search_tracks(struct udf_mount *ump, struct udf_args *args,
 		trackinfo.tracknr = tracknr;
 		error = udf_update_trackinfo(ump, &trackinfo);
 		if (error)
-			return error;
+			return (error);
 
 		if (trackinfo.sessionnr == args->sessionnr)
 			break;
@@ -380,11 +381,11 @@ udf_search_tracks(struct udf_mount *ump, struct udf_args *args,
 	if (*last_tracknr < *first_tracknr) {
 		printf( "udf_search_tracks: sanity check on drive+disc failed, "
 			"drive returned garbage\n");
-		return EINVAL;
+		return (EINVAL);
 	}
 
 	assert(*last_tracknr >= *first_tracknr);
-	return 0;
+	return (0);
 }
 
 
@@ -504,7 +505,7 @@ udf_search_writing_tracks(struct udf_mount *ump)
 	/* update discinfo since it might have changed */
 	error = udf_update_discinfo(ump);
 	if (error)
-		return error;
+		return (error);
 
 	num_tracks  = ump->discinfo.num_tracks;
 	start_track = ump->discinfo.first_track;
@@ -513,7 +514,7 @@ udf_search_writing_tracks(struct udf_mount *ump)
 	trackinfo.tracknr = start_track;
 	error = udf_update_trackinfo(ump, &trackinfo);
 	if (error)
-		return error;
+		return (error);
 
 	/* copy results to our mount point */
 	ump->data_track     = trackinfo;
@@ -521,14 +522,14 @@ udf_search_writing_tracks(struct udf_mount *ump)
 
 	/* if not sequential, we're done */
 	if (num_tracks == 1)
-		return 0;
+		return (0);
 
 	for (tracknr = start_track;tracknr <= num_tracks; tracknr++) {
 		/* get track info */
 		trackinfo.tracknr = tracknr;
 		error = udf_update_trackinfo(ump, &trackinfo);
 		if (error)
-			return error;
+			return (error);
 
 		/*
 		 * If this track is marked damaged, ask for repair. This is an
@@ -548,7 +549,7 @@ udf_search_writing_tracks(struct udf_mount *ump)
 			/* reget track info */
 			error = udf_update_trackinfo(ump, &trackinfo);
 			if (error)
-				return error;
+				return (error);
 		}
 		if ((trackinfo.flags & MMC_TRACKINFO_NWA_VALID) == 0)
 			continue;
@@ -576,12 +577,12 @@ udf_search_writing_tracks(struct udf_mount *ump)
 	}
 
 	if ((ump->data_track.flags & MMC_TRACKINFO_NWA_VALID) == 0)
-		return EROFS;
+		return (EROFS);
 
 	if ((ump->metadata_track.flags & MMC_TRACKINFO_NWA_VALID) == 0)
-		return EROFS;
+		return (EROFS);
 
-	return 0;
+	return (0);
 }
 #endif
 
@@ -610,10 +611,10 @@ udf_check_tag(void *blob)
 	}
 	if (sum != tag->cksum) {
 		/* bad tag header checksum; this is not a valid tag */
-		return EINVAL;
+		return (EINVAL);
 	}
 
-	return 0;
+	return (0);
 }
 
 
@@ -632,18 +633,18 @@ udf_check_tag_payload(void *blob, uint32_t max_length)
 
 	/* check payload CRC if applicable */
 	if (crc_len == 0)
-		return 0;
+		return (0);
 
 	if (crc_len > max_length)
-		return EIO;
+		return (EIO);
 
 	crc = udf_cksum(((uint8_t *) tag) + UDF_DESC_TAG_LENGTH, crc_len);
 	if (crc != le16toh(tag->desc_crc)) {
 		/* bad payload CRC; this is a broken tag */
-		return EINVAL;
+		return (EINVAL);
 	}
 
-	return 0;
+	return (0);
 }
 
 
@@ -744,14 +745,14 @@ udf_tagsize(union dscrptr *dscr, uint32_t lb_size)
 	}
 
 	if ((size == 0) || (lb_size == 0))
-		return 0;
+		return (0);
 
 	if (lb_size == 1)
-		return size;
+		return (size);
 
 	/* round up in sectors */
 	num_lb = (size + lb_size -1) / lb_size;
-	return num_lb * lb_size;
+	return (num_lb * lb_size);
 }
 
 
@@ -766,7 +767,7 @@ udf_fidsize(struct fileid_desc *fid)
 	size = UDF_FID_SIZE + fid->l_fi + le16toh(fid->l_iu);
 	size = (size + 3) & ~3;
 
-	return size;
+	return (size);
 }
 
 /* --------------------------------------------------------------------- */
@@ -824,7 +825,7 @@ udf_read_anchor(struct udf_mount *ump, uint32_t sector, struct anchor_vdp **dst)
 	if (!error) {
 		/* blank terminator blocks are not allowed here */
 		if (*dst == NULL)
-			return ENOENT;
+			return (ENOENT);
 		if (le16toh((*dst)->tag.id) != TAGID_ANCHOR) {
 			error = ENOENT;
 			free(*dst, M_UDFTEMP);
@@ -832,7 +833,7 @@ udf_read_anchor(struct udf_mount *ump, uint32_t sector, struct anchor_vdp **dst)
 		}
 	}
 
-	return error;
+	return (error);
 }
 
 void
@@ -889,7 +890,7 @@ udf_last_session_info()
 	}
 	if (error) {
 		printf("UDF mount: reading disc geometry failed\n");
-		return 0;
+		return (0);
 	}
 
 	track_start = first_track.track_start;
@@ -968,7 +969,7 @@ udf_read_anchors(struct udf_mount *ump)
 		}
 	}
 
-	return ok;
+	return (ok);
 }
 
 /* --------------------------------------------------------------------- */
@@ -985,7 +986,7 @@ udf_get_c_type(struct udf_node *udf_node)
 		if (udf_node == udf_node->ump->metadatabitmap_node)
 			what = UDF_C_METADATA_SBM;
 
-	return what;
+	return (what);
 }
 
 
@@ -1000,7 +1001,7 @@ udf_get_record_vpart(struct udf_mount *ump, int udf_c_type)
 	if (udf_c_type == UDF_C_FIDS)
 		vpart_num = ump->fids_part;
 
-	return vpart_num;
+	return (vpart_num);
 }
 #endif
 /* --------------------------------------------------------------------- */
@@ -1053,7 +1054,7 @@ udf_process_vds_descriptor(struct udf_mount *ump, union dscrptr *dscr)
 		}
 		if (phys_part == UDF_PARTITIONS) {
 			free(dscr, M_UDFTEMP);
-			return EINVAL;
+			return (EINVAL);
 		}
 
 		UDF_UPDATE_DSCR(ump->partitions[phys_part], &dscr->pd);
@@ -1065,7 +1066,7 @@ udf_process_vds_descriptor(struct udf_mount *ump, union dscrptr *dscr)
 		free(dscr, M_UDFTEMP);
 	}
 
-	return 0;
+	return (0);
 }
 #undef UDF_UPDATE_DSCR
 
@@ -1087,17 +1088,17 @@ udf_read_vds_extent(struct udf_mount *ump, uint32_t loc, uint32_t len)
 		if (error) {
 			if (!dscr)
 				free(dscr, M_UDFTEMP);
-			return error;
+			return (error);
 		}
 
 		/* blank block is a terminator */
 		if (dscr == NULL)
-			return 0;
+			return (0);
 
 		/* TERM descriptor is a terminator */
 		if (le16toh(dscr->tag.id) == TAGID_TERM) {
 			free(dscr, M_UDFTEMP);
-			return 0;
+			return (0);
 		}
 
 		/* process all others */
@@ -1113,7 +1114,7 @@ udf_read_vds_extent(struct udf_mount *ump, uint32_t loc, uint32_t len)
 		loc += dscr_size / sector_size;
 	}
 
-	return error;
+	return (error);
 }
 
 
@@ -1157,7 +1158,7 @@ udf_read_vds_space(struct udf_mount *ump)
 		error = udf_read_vds_extent(ump, reserve_loc, reserve_len);
 	}
 
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -1263,7 +1264,7 @@ udf_retrieve_lvint(struct udf_mount *ump)
 		error = ENOENT;
 
 	ump->logvol_integrity = lvint;
-	return error;
+	return (error);
 }
 
 #if 0
@@ -1420,7 +1421,7 @@ udf_loose_lvint_history(struct udf_mount *ump)
 
 	free(bufs, M_UDFTEMP);
 
-	return 0;
+	return (0);
 }
 
 
@@ -1458,17 +1459,17 @@ again:
 		if ((space < 3) && (lvflag & UDF_APPENDONLY_LVINT)) {
 			/* don't allow this logvol to be opened */
 			/* TODO extent LVINT space if possible */
-			return EROFS;
+			return (EROFS);
 		}
 	}
 
 	if (space < 1) {
 		if (lvflag & UDF_APPENDONLY_LVINT)
-			return EROFS;
+			return (EROFS);
 		/* loose history by re-writing extents */
 		error = udf_loose_lvint_history(ump);
 		if (error)
-			return error;
+			return (error);
 		goto again;
 	}
 
@@ -1487,7 +1488,7 @@ again:
 			sector, sector);
 	DPRINTF(VOLUMES, ("writeout lvint : error = %d\n", error));
 	if (error)
-		return error;
+		return (error);
 
 	/* advance write position */
 	trace->wpos++; space--;
@@ -1506,7 +1507,7 @@ again:
 	DPRINTF(VOLUMES, ("finished writing out logvol integrity descriptor "
 		"successfull\n"));
 
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -1558,12 +1559,12 @@ udf_read_physical_partition_spacetables(struct udf_mount *ump)
 
 				printf( "UDF mount: error reading unallocated "
 					"space bitmap\n");
-				return EROFS;
+				return (EROFS);
 			}
 		} else {
 			/* blank not allowed */
 			printf("UDF mount: blank unallocated space bitmap\n");
-			return EROFS;
+			return (EROFS);
 		}
 	}
 
@@ -1577,7 +1578,7 @@ udf_read_physical_partition_spacetables(struct udf_mount *ump)
 		len     = le32toh(parthdr->unalloc_space_table.len);
 		if (len) {
 			printf("UDF mount: space tables not supported\n");
-			return EROFS;
+			return (EROFS);
 		}
 	}
 
@@ -1617,12 +1618,12 @@ udf_read_physical_partition_spacetables(struct udf_mount *ump)
 
 				printf( "UDF mount: error reading freed  "
 					"space bitmap\n");
-				return EROFS;
+				return (EROFS);
 			}
 		} else {
 			/* blank not allowed */
 			printf("UDF mount: blank freed space bitmap\n");
-			return EROFS;
+			return (EROFS);
 		}
 	}
 
@@ -1636,11 +1637,11 @@ udf_read_physical_partition_spacetables(struct udf_mount *ump)
 		len     = le32toh(parthdr->freed_space_table.len);
 		if (len) {
 			printf("UDF mount: space tables not supported\n");
-			return EROFS;
+			return (EROFS);
 		}
 	}
 
-	return 0;
+	return (0);
 }
 
 
@@ -1708,7 +1709,7 @@ udf_write_physical_partition_spacetables(struct udf_mount *ump, int waitfor)
 		}
 	}
 
-	return error_all;
+	return (error_all);
 }
 #endif
 
@@ -1726,7 +1727,7 @@ udf_read_metadata_partition_spacetable(struct udf_mount *ump)
 
 	/* only read in when metadata bitmap node is read in */
 	if (bitmap_node == NULL)
-		return 0;
+		return (0);
 
 	if (bitmap_node->fe) {
 		inflen = le64toh(bitmap_node->fe->inf_len);
@@ -1741,7 +1742,7 @@ udf_read_metadata_partition_spacetable(struct udf_mount *ump)
 	/* allocate space for bitmap */
 	dscr = malloc(inflen, M_UDFTEMP, M_WAITOK); /*M_CANFAIL was removed from third param*/
 	if (!dscr)
-		return ENOMEM;
+		return (ENOMEM);
 
 	/* set vnode type to regular file or we can't read from it! */
 	bitmap_node->vnode->v_type = VREG;
@@ -1778,13 +1779,13 @@ udf_read_metadata_partition_spacetable(struct udf_mount *ump)
 		goto errorout;
 	}
 
-	return 0;
+	return (0);
 
 errorout:
 	free(dscr, M_UDFTEMP);
 	printf( "UDF mount: error reading unallocated "
 		"space bitmap for metadata partition\n");
-	return EROFS;
+	return (EROFS);
 }
 
 
@@ -1800,7 +1801,7 @@ udf_write_metadata_partition_spacetable(struct udf_mount *ump, int waitfor)
 
 	/* only write out when metadata bitmap node is known */
 	if (bitmap_node == NULL)
-		return 0;
+		return (0);
 
 	if (bitmap_node->fe) {
 		inflen = le64toh(bitmap_node->fe->inf_len);
@@ -1837,7 +1838,7 @@ udf_write_metadata_partition_spacetable(struct udf_mount *ump, int waitfor)
 		printf( "Error writing out metadata partition unalloced "
 			"space bitmap!\n");
 
-	return error;
+	return (error);
 }
 #endif
 
@@ -1863,11 +1864,11 @@ udf_process_vds(struct udf_mount *ump) {
 
 	/* we need at least one primary and one logical volume descriptor */
 	if ((ump->primary_vol == NULL) || (ump->logical_vol) == NULL)
-		return EINVAL;
+		return (EINVAL);
 
 	/* we need at least one partition descriptor */
 	if (ump->partitions[0] == NULL)
-		return EINVAL;
+		return (EINVAL);
 
 /*
 Check that character set is correct?
@@ -1880,14 +1881,14 @@ Check that character set is correct?
 	/* check logical volume sector size verses device sector size */
 	if (le32toh(ump->logical_vol->lb_size) != ump->sector_size) {
 		printf("UDF mount: format violation, lb_size != sector size\n");
-		return EINVAL;
+		return (EINVAL);
 	}
 
 	/* check domain name */
 	domain_name = ump->logical_vol->domain_id.id;
 	if (strncmp(domain_name, "*OSTA UDF Compliant", 20)) {
 		printf("mount_udf: disc not OSTA UDF Compliant, aborting\n");
-		return EINVAL;
+		return (EINVAL);
 	}
 
 	/*
@@ -1897,7 +1898,7 @@ Check that character set is correct?
 	 */
 	error = udf_retrieve_lvint(ump);
 	if (error != 0)
-		return EINVAL; // previously it always returned this on error.
+		return (EINVAL); // previously it always returned this on error.
 
 	/* process derived structures */
 	n_pm   = le32toh(ump->logical_vol->n_pm);   /* num partmaps         */
@@ -1918,7 +1919,7 @@ Check that character set is correct?
 
 	if (n_pm > UDF_PMAPS) {
 		printf("UDF mount: too many mappings\n");
-		return EINVAL;
+		return (EINVAL);
 	}
 
 	/* count types and set partition numbers */
@@ -1973,7 +1974,7 @@ printf("*UDF Metadata Partition\n");
 			}
 			break;
 		default:
-			return EINVAL;
+			return (EINVAL);
 		}
 
 		/*
@@ -1990,9 +1991,9 @@ printf("*UDF Metadata Partition\n");
 		}
 
 		if (phys_part == UDF_PARTITIONS)
-			return EINVAL;
+			return (EINVAL);
 		if (pmap_type == UDF_VTOP_TYPE_UNKNOWN)
-			return EINVAL;
+			return (EINVAL);
 
 		ump->vtop   [log_part] = phys_part;
 		ump->vtop_tp[log_part] = pmap_type;
@@ -2004,14 +2005,14 @@ printf("*UDF Metadata Partition\n");
 
 	/* test some basic UDF assertions/requirements */
 	if ((n_virt > 1) || (n_spar > 1) || (n_meta > 1))
-		return EINVAL;
+		return (EINVAL);
 
 	if (n_virt) {
 		if ((n_phys == 0) || n_spar || n_meta)
-			return EINVAL;
+			return (EINVAL);
 	}
 	if (n_spar + n_phys == 0)
-		return EINVAL;
+		return (EINVAL);
 
 	/* select allocation type for each logical partition */
 	for (log_part = 0; log_part < n_pm; log_part++) {
@@ -2107,7 +2108,7 @@ printf("*UDF Metadata Partition\n");
 		(ump->strategy == &udf_strat_rmw) ? "RMW" : "UNKNOWN!"));
 #endif
 	/* signal its OK for now */
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -2168,7 +2169,7 @@ udf_advance_uniqueid(struct udf_mount *ump)
 	ump->logvol_integrity->lvint_next_unique_id = htole64(unique_id + 1);
 	mutex_exit(&ump->logvol_mutex);
 
-	return unique_id;
+	return (unique_id);
 }
 
 
@@ -2273,7 +2274,7 @@ udf_create_parentfid(struct udf_mount *ump, struct fileid_desc *fid,
 	fid->tag.desc_crc_len = htole16(fidsize - UDF_DESC_TAG_LENGTH);
 	(void) udf_validate_tag_and_crc_sums((union dscrptr *) fid);
 
-	return fidsize;
+	return (fidsize);
 }
 #endif
 /* --------------------------------------------------------------------- */
@@ -2310,9 +2311,9 @@ udf_impl_extattr_check(struct impl_extattr_entry *implext)
 		/* checksum valid? */
 		spos = (uint16_t *) implext->data;
 		if (le16toh(*spos) != udf_ea_cksum((uint8_t *) implext))
-			return EINVAL;
+			return (EINVAL);
 	}
-	return 0;
+	return (0);
 }
 
 static void
@@ -2355,17 +2356,17 @@ udf_extattr_search_intern(struct udf_node *node,
 
 	/* something recorded here? */
 	if (l_ea == 0)
-		return ENOENT;
+		return (ENOENT);
 
 	/* check extended attribute tag; what to do if it fails? */
 	error = udf_check_tag(eahdr);
 	if (error)
-		return EINVAL;
+		return (EINVAL);
 	if (le16toh(eahdr->tag.id) != TAGID_EXTATTR_HDR)
-		return EINVAL;
+		return (EINVAL);
 	error = udf_check_tag_payload(eahdr, sizeof(struct extattrhdr_desc));
 	if (error)
-		return EINVAL;
+		return (EINVAL);
 
 	/* looking for Ecma-167 attributes? */
 	offset = sizeof(struct extattrhdr_desc);
@@ -2374,17 +2375,17 @@ udf_extattr_search_intern(struct udf_node *node,
 	if (sattr == 2048) {				/* [4/48.10.8] */
 		offset = le32toh(eahdr->impl_attr_loc);
 		if (offset == UDF_IMPL_ATTR_LOC_NOT_PRESENT)
-			return ENOENT;
+			return (ENOENT);
 	}
 	if (sattr == 65536) {				/* [4/48.10.9] */
 		offset = le32toh(eahdr->appl_attr_loc);
 		if (offset == UDF_APPL_ATTR_LOC_NOT_PRESENT)
-			return ENOENT;
+			return (ENOENT);
 	}
 
 	/* paranoia check offset and l_ea */
 	if (l_ea + offset >= sector_size - sizeof(struct extattr_entry))
-		return EINVAL;
+		return (EINVAL);
 
 	/* find our extended attribute  */
 	l_ea -= offset;
@@ -2397,7 +2398,7 @@ udf_extattr_search_intern(struct udf_node *node,
 		/* get complete attribute length and check for roque values */
 		a_l = le32toh(attrhdr->a_l);
 		if ((a_l == 0) || (a_l > l_ea))
-			return EINVAL;
+			return (EINVAL);
 
 		if (attrhdr->type != sattr)
 			goto next_attribute;
@@ -2406,7 +2407,7 @@ udf_extattr_search_intern(struct udf_node *node,
 		if (attrhdr->type < 2048) {	/* Ecma-167 attribute */
 			*offsetp = offset;
 			*lengthp = a_l;
-			return 0;		/* success */
+			return (0);		/* success */
 		}
 
 		/*
@@ -2420,7 +2421,7 @@ udf_extattr_search_intern(struct udf_node *node,
 			/* we have found our appl/implementation attribute */
 			*offsetp = offset;
 			*lengthp = a_l;
-			return 0;		/* success */
+			return (0);		/* success */
 		}
 
 next_attribute:
@@ -2430,7 +2431,7 @@ next_attribute:
 		offset += a_l;
 	}
 	/* not found */
-	return ENOENT;
+	return (ENOENT);
 }
 
 
@@ -2574,16 +2575,16 @@ udf_update_lvid_from_vat_extattr(struct udf_node *vat_node)
 
 	error = udf_extattr_search_intern(vat_node, 2048, extstr, &offset, &a_l);
 	if (error)
-		return error;
+		return (error);
 
 	implext = (struct impl_extattr_entry *) (ea_start + offset);
 	error = udf_impl_extattr_check(implext);
 	if (error)
-		return error;
+		return (error);
 
 	/* paranoia */
 	if (a_l != sizeof(*implext) -1 + le32toh(implext->iu_l) + sizeof(lvext))
-		return EINVAL;
+		return (EINVAL);
 
 	/*
 	 * we have found our "VAT LVExtension attribute. BUT due to a
@@ -2605,7 +2606,7 @@ udf_update_lvid_from_vat_extattr(struct udf_node *vat_node)
 		udf_calc_impl_extattr_checksum(implext);
 	}
 
-	return 0;
+	return (0);
 }
 
 #if 0
@@ -2637,7 +2638,7 @@ udf_update_vat_extattr_from_lvid(struct udf_node *vat_node)
 
 	error = udf_extattr_search_intern(vat_node, 2048, extstr, &offset, &a_l);
 	if (error)
-		return error;
+		return (error);
 	/* found, it existed */
 
 	/* paranoia */
@@ -2645,7 +2646,7 @@ udf_update_vat_extattr_from_lvid(struct udf_node *vat_node)
 	error = udf_impl_extattr_check(implext);
 	if (error) {
 		DPRINTF(VOLUMES, ("VAT LVExtension bad on update\n"));
-		return error;
+		return (error);
 	}
 	/* it is correct */
 
@@ -2664,7 +2665,7 @@ udf_update_vat_extattr_from_lvid(struct udf_node *vat_node)
 
 	memcpy(lvextpos, &lvext, sizeof(lvext));
 
-	return 0;
+	return (0);
 }
 #endif
 /* --------------------------------------------------------------------- */
@@ -2676,11 +2677,11 @@ udf_vat_read(struct udf_node *vat_node, uint8_t *blob, int size, uint32_t offset
 
 /*	mutex_enter(&ump->allocate_mutex); */
 	if (offset + size > ump->vat_offset + ump->vat_entries * 4)
-		return EINVAL;
+		return (EINVAL);
 	memcpy(blob, ump->vat_table + offset, size);
 /*	mutex_exit(&ump->allocate_mutex); */
 
-	return 0;
+	return (0);
 }
 
 #if 0
@@ -2700,7 +2701,7 @@ udf_vat_write(struct udf_node *vat_node, uint8_t *blob, int size, uint32_t offse
 			M_UDFTEMP, M_WAITOK | M_CANFAIL);
 		if (!new_vat_table) {
 			printf("udf_vat_write: can't extent VAT, out of mem\n");
-			return ENOMEM;
+			return (ENOMEM);
 		}
 		ump->vat_table = new_vat_table;
 		ump->vat_table_alloc_len += UDF_VAT_CHUNKSIZE;
@@ -2708,7 +2709,7 @@ udf_vat_write(struct udf_node *vat_node, uint8_t *blob, int size, uint32_t offse
 	ump->vat_table_len = MAX(ump->vat_table_len, offset_high);
 
 	memcpy(ump->vat_table + offset, blob, size);
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -2788,7 +2789,7 @@ udf_update_vat_descriptor(struct udf_mount *ump)
 	}
 	free(raw_vat, M_UDFTEMP);
 
-	return error;	/* success! */
+	return (error);	/* success! */
 }
 
 
@@ -2825,7 +2826,7 @@ udf_writeout_vat(struct udf_mount *ump)
 		printf("udf_writeout_vat: error writing VAT node!\n");
 out:
 
-	return error;
+	return (error);
 }
 #endif
 
@@ -2855,7 +2856,7 @@ udf_check_for_vat(struct udf_node *vat_node)
 	/* vat_length is really 64 bits though impossible */
 
 	if (!vat_node)
-		return ENOENT;
+		return (ENOENT);
 
 	/* get mount info */
 	ump = vat_node->ump;
@@ -2884,7 +2885,7 @@ udf_check_for_vat(struct udf_node *vat_node)
 	/* Check icb filetype! it has to be 0 or UDF_ICB_FILETYPE_VAT */
 	filetype = icbtag->file_type;
 	if ((filetype != 0) && (filetype != UDF_ICB_FILETYPE_VAT))
-		return ENOENT;
+		return (ENOENT);
 
 	vat_table_alloc_len =
 		((vat_length + UDF_VAT_CHUNKSIZE-1) / UDF_VAT_CHUNKSIZE)
@@ -2896,7 +2897,7 @@ udf_check_for_vat(struct udf_node *vat_node)
 	if (vat_table == NULL) {
 		printf("allocation of %d bytes failed for VAT\n",
 			vat_table_alloc_len);
-		return ENOMEM;
+		return (ENOMEM);
 	}
 #endif
 
@@ -3000,7 +3001,7 @@ out:
 	}
 	free(raw_vat, M_UDFTEMP);
 
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -3023,7 +3024,7 @@ udf_search_vat(struct udf_mount *ump)
 	/* If we don't know the end of the session, we can not search for the 
 	VAT. */
 	if (ump->last_possible_vat_location == 0)
-		return ENOENT;
+		return (ENOENT);
 	
 	vat_loc = ump->last_possible_vat_location;
 	if (vat_loc > 256)
@@ -3073,7 +3074,7 @@ udf_search_vat(struct udf_mount *ump)
 	/* keep our VAT node around */
 	ump->vat_node = vat_node;
 
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -3112,9 +3113,9 @@ udf_read_sparables(struct udf_mount *ump, union udf_pmap *mapping)
 	}
 
 	if (ump->sparing_table)
-		return 0;
+		return (0);
 
-	return ENOENT;
+	return (ENOENT);
 }
 
 /* --------------------------------------------------------------------- */
@@ -3193,7 +3194,7 @@ udf_read_metadata_nodes(struct udf_mount *ump, union udf_pmap *mapping)
 	}
 	/* DPRINTFIF(VOLUMES, error, ("udf mount: failed to read "
 				   "metadata files\n")); */
-	return error;
+	return (error);
 }
 /* --------------------------------------------------------------------- */
 
@@ -3221,19 +3222,19 @@ udf_read_vds_tables(struct udf_mount *ump)
 			/* search and load VAT */
 			error = udf_search_vat(ump);
 			if (error)
-				return ENOENT;
+				return (ENOENT);
 			break;
 		case UDF_VTOP_TYPE_SPARABLE :
 			/* load one of the sparable tables */
 			error = udf_read_sparables(ump, mapping);
 			if (error)
-				return ENOENT;
+				return (ENOENT);
 			break;
 		case UDF_VTOP_TYPE_META :
 			/* load the associated file descriptors */
 			error = udf_read_metadata_nodes(ump, mapping);
 			if (error)
-				return ENOENT;
+				return (ENOENT);
 			break;
 		default:
 			break;
@@ -3247,14 +3248,14 @@ udf_read_vds_tables(struct udf_mount *ump)
 	if ((ump->vfs_mountp->mnt_flag & MNT_RDONLY) == 0) {
 		error = udf_read_physical_partition_spacetables(ump);
 		if (error)
-			return error;
+			return (error);
 
 		/* also read in metadata partition spacebitmap if defined */
 		error = udf_read_metadata_partition_spacetable(ump);
-		return error;
+		return (error);
 	}
 #endif
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -3296,7 +3297,7 @@ udf_read_rootdirs(struct udf_mount *ump)
 			break;
 		if (dscr_type != TAGID_FSD) {
 			free(dscr, M_UDFTEMP);
-			return ENOENT;
+			return (ENOENT);
 		}
 
 		/*
@@ -3327,7 +3328,7 @@ udf_read_rootdirs(struct udf_mount *ump)
 
 	/* there has to be one */
 	if (ump->fileset_desc == NULL)
-		return ENOENT;
+		return (ENOENT);
 
 	udf_update_logvolname(ump, ump->logical_vol->logvol_id);
 
@@ -3346,7 +3347,7 @@ udf_read_rootdirs(struct udf_mount *ump)
 	ino = udf_get_node_id(dir_loc);
 	error = udf_vget(mp, ino, LK_EXCLUSIVE, &rootdir_node);
 	if (error)
-		return ENOENT;
+		return (ENOENT);
 
 	/* aparently it read in fine */
 
@@ -3378,7 +3379,7 @@ udf_read_rootdirs(struct udf_mount *ump)
 		vput(rootdir_node);
 	}
 
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -3406,7 +3407,7 @@ udf_get_node_id(const struct long_ad *icbptr)
 	ino = (blkn + 1) | (part << 29);
 	//printf("Raw blkno: %u, raw part: %u\n", icbptr->loc.lb_num, icbptr->loc.part_num);
 	//printf("udf_get_node_id -- blkno: %u, part: %u, ino: %u\n", blkn, part, ino);
-	return ino;
+	return (ino);
 }
 
 int
@@ -3425,7 +3426,7 @@ udf_get_node_longad(const ino_t ino, struct long_ad *icbptr)
 
 	//printf("Raw blkno: %u, raw part: %u\n", icbptr->loc.lb_num, icbptr->loc.part_num);
 	//printf("udf_get_node_longad -- blkno: %u, part: %u, ino: %u\n", blkn, part, ino2);
-	return 0;
+	return (0);
 }
 
 #if 0
@@ -3433,16 +3434,16 @@ int
 udf_compare_icb(const struct long_ad *a, const struct long_ad *b)
 {
 	if (le16toh(a->loc.part_num) < le16toh(b->loc.part_num))
-		return -1;
+		return (-1);
 	if (le16toh(a->loc.part_num) > le16toh(b->loc.part_num))
-		return 1;
+		return (1);
 
 	if (le32toh(a->loc.lb_num) < le32toh(b->loc.lb_num))
-		return -1;
+		return (-1);
 	if (le32toh(a->loc.lb_num) > le32toh(b->loc.lb_num))
-		return 1;
+		return (1);
 
-	return 0;
+	return (0);
 }
 
 
@@ -3452,7 +3453,7 @@ udf_compare_rbnodes(const struct rb_node *a, const struct rb_node *b)
 	struct udf_node *a_node = RBTOUDFNODE(a);
 	struct udf_node *b_node = RBTOUDFNODE(b);
 
-	return udf_compare_icb(&a_node->loc, &b_node->loc);
+	return (udf_compare_icb(&a_node->loc, &b_node->loc));
 }
 
 
@@ -3462,7 +3463,7 @@ udf_compare_rbnode_icb(const struct rb_node *a, const void *key)
 	struct udf_node *a_node = RBTOUDFNODE(a);
 	const struct long_ad * const icb = key;
 
-	return udf_compare_icb(&a_node->loc, icb);
+	return (udf_compare_icb(&a_node->loc, icb));
 }
 
 
@@ -3498,11 +3499,11 @@ loop:
 		mutex_exit(&ump->ihash_lock);
 		if (vget(vp, LK_EXCLUSIVE))
 			goto loop;
-		return udf_node;
+		return (udf_node);
 	}
 	mutex_exit(&ump->ihash_lock);
 
-	return NULL;
+	return (NULL);
 }
 
 
@@ -3544,11 +3545,11 @@ udf_validate_session_start(struct udf_mount *ump)
 
 	/* disc appendable? */
 	if (ump->discinfo.disc_state == MMC_STATE_FULL)
-		return EROFS;
+		return (EROFS);
 
 	/* already written here? if so, there should be an ISO VDS */
 	if (ump->discinfo.last_session_state == MMC_STATE_INCOMPLETE)
-		return 0;
+		return (0);
 
 	/*
 	 * Check if the first track of the session is blank and if so, copy or
@@ -3560,7 +3561,7 @@ udf_validate_session_start(struct udf_mount *ump)
 	trackinfo.tracknr = tracknr;
 	error = udf_update_trackinfo(ump, &trackinfo);
 	if (error)
-		return error;
+		return (error);
 
 	udf_dump_trackinfo(&trackinfo);
 	KASSERT(trackinfo.flags & (MMC_TRACKINFO_BLANK | MMC_TRACKINFO_RESERVED));
@@ -3580,13 +3581,13 @@ udf_validate_session_start(struct udf_mount *ump)
 		trackinfo.tracknr = tracknr;
 		error = udf_update_trackinfo(ump, &trackinfo);
 		if (error)
-			return error;
+			return (error);
 		if (trackinfo.sessionnr == sessionnr)
 			break;
 		tracknr++;
 	}
 	if (trackinfo.sessionnr != sessionnr)
-		return ENOENT;
+		return (ENOENT);
 
 	udf_dump_trackinfo(&trackinfo);
 
@@ -3704,7 +3705,7 @@ udf_validate_session_start(struct udf_mount *ump)
 	/* synchronise device caches */
 	(void) udf_synchronise_caches(ump);
 
-	return error;
+	return (error);
 }
 
 
@@ -3717,22 +3718,22 @@ udf_open_logvol(struct udf_mount *ump)
 	/* already/still open? */
 	logvol_integrity = le32toh(ump->logvol_integrity->integrity_type);
 	if (logvol_integrity == UDF_INTEGRITY_OPEN)
-		return 0;
+		return (0);
 
 	/* can we open it ? */
 	if (ump->vfs_mountp->mnt_flag & MNT_RDONLY)
-		return EROFS;
+		return (EROFS);
 
 	/* setup write parameters */
 	if ((error = udf_setup_writeparams(ump)) != 0)
-		return error;
+		return (error);
 
 	/* determine data and metadata tracks (most likely same) */
 	error = udf_search_writing_tracks(ump);
 	if (error) {
 		/* most likely lack of space */
 		printf("udf_open_logvol: error searching writing tracks\n");
-		return EROFS;
+		return (EROFS);
 	}
 
 	/* writeout/update lvint on disc or only in memory */
@@ -3740,7 +3741,7 @@ udf_open_logvol(struct udf_mount *ump)
 		/* TODO optional track reservation opening */
 		error = udf_validate_session_start(ump);
 		if (error)
-			return error;
+			return (error);
 
 		/* determine data and metadata tracks again */
 		error = udf_search_writing_tracks(ump);
@@ -3756,11 +3757,11 @@ udf_open_logvol(struct udf_mount *ump)
 		if (error) {
 			ump->logvol_integrity->integrity_type =
 						htole32(UDF_INTEGRITY_CLOSED);
-			return error;
+			return (error);
 		}
 	}
 
-	return 0;
+	return (0);
 }
 #endif
 
@@ -3778,7 +3779,7 @@ udf_close_logvol(struct udf_mount *ump, int mntflags)
 	/* already/still closed? */
 	logvol_integrity = le32toh(ump->logvol_integrity->integrity_type);
 	if (logvol_integrity == UDF_INTEGRITY_CLOSED)
-		return 0;
+		return (0);
 
 	/* writeout/update lvint or write out VAT */
 	DPRINTF(VOLUMES, ("udf_close_logvol: closing logical volume\n"));
@@ -3839,7 +3840,7 @@ udf_close_logvol(struct udf_mount *ump, int mntflags)
 		if (nok < 14) {
 			/* arbitrary; but at least one or two CD frames */
 			printf("writeout of at least 14 VATs failed\n");
-			return error;
+			return (error);
 		}
 	}
 
@@ -3849,7 +3850,7 @@ udf_close_logvol(struct udf_mount *ump, int mntflags)
 	if (ump->lvclose & UDF_CLOSE_SESSION) {
 		error = udf_validate_session_start(ump);
 		if (error)
-			return error;
+			return (error);
 
 		(void) udf_synchronise_caches(ump);
 
@@ -3955,12 +3956,12 @@ udf_close_logvol(struct udf_mount *ump, int mntflags)
 		/* HELP now what? mark it open again for now */
 		ump->logvol_integrity->integrity_type =
 			htole32(UDF_INTEGRITY_OPEN);
-		return error;
+		return (error);
 	}
 
 	(void) udf_synchronise_caches(ump);
 
-	return 0;
+	return (0);
 }
 #endif
 
@@ -4034,7 +4035,7 @@ udf_gop_alloc(struct vnode *vp, off_t off,
 	DPRINTF(ALLOC, ("\tlb_start %"PRIu64", lb_end %"PRIu64", num_lb %d\n",
 		lb_start, lb_end, num_lb));
 
-	return error;
+	return (error);
 }
 
 
@@ -4091,7 +4092,7 @@ udf_write_terminator(struct udf_mount *ump, uint32_t sector)
 
 	free(dscr, M_UDFTEMP);
 
-	return error;
+	return (error);
 }
 #endif
 
@@ -4110,7 +4111,7 @@ udf_perm_to_unix_mode(uint32_t perm)
 	mode |= ((perm & UDF_FENTRY_PERM_GRP_MASK  ) >> 2);
 	mode |= ((perm & UDF_FENTRY_PERM_OWNER_MASK) >> 4);
 
-	return mode;
+	return (mode);
 }
 
 /* --------------------------------------------------------------------- */
@@ -4127,7 +4128,7 @@ unix_mode_to_udf_perm(mode_t mode)
 	perm |= ((mode & S_IWGRP) << 5);
 	perm |= ((mode & S_IWUSR) << 7);
 
-	return perm;
+	return (perm);
 }
 #endif
 /* --------------------------------------------------------------------- */
@@ -4138,23 +4139,23 @@ udf_icb_to_unix_filetype(uint32_t icbftype)
 	switch (icbftype) {
 	case UDF_ICB_FILETYPE_DIRECTORY :
 	case UDF_ICB_FILETYPE_STREAMDIR :
-		return S_IFDIR;
+		return (S_IFDIR);
 	case UDF_ICB_FILETYPE_FIFO :
-		return S_IFIFO;
+		return (S_IFIFO);
 	case UDF_ICB_FILETYPE_CHARDEVICE :
-		return S_IFCHR;
+		return (S_IFCHR);
 	case UDF_ICB_FILETYPE_BLOCKDEVICE :
-		return S_IFBLK;
+		return (S_IFBLK);
 	case UDF_ICB_FILETYPE_RANDOMACCESS :
 	case UDF_ICB_FILETYPE_REALTIME :
-		return S_IFREG;
+		return (S_IFREG);
 	case UDF_ICB_FILETYPE_SYMLINK :
-		return S_IFLNK;
+		return (S_IFLNK);
 	case UDF_ICB_FILETYPE_SOCKET :
-		return S_IFSOCK;
+		return (S_IFSOCK);
 	}
 	/* no idea what this is */
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -4165,7 +4166,7 @@ static int udf_leapyear(int year) {
 	i = (year % 400 == 0) ? 1 : 0;
 	i |= (year % 100 == 0) ? 0 : 1; 
 	i &= (year % 4 == 0) ? 1 : 0;
-	return i;
+	return (i);
 }
 void
 udf_timestamp_to_timespec(struct udf_mount *ump,
@@ -4299,7 +4300,7 @@ udf_getaccessmode(struct udf_node *udf_node)
 
 /*	UDF_UNLOCK_NODE(udf_node, 0); */
 
-	return mode | ftype;
+	return (mode | ftype);
 }
 
 #if 0
@@ -4426,9 +4427,9 @@ dirhash_fill(struct udf_node *dir_node)
 	KASSERT(dirh->refcnt > 0);
 
 	if (dirh->flags & DIRH_BROKEN)
-		return EIO;
+		return (EIO);
 	if (dirh->flags & DIRH_COMPLETE)
-		return 0;
+		return (0);
 
 	/* make sure we have a clean dirhash to add to */
 	dirhash_purge_entries(dirh);
@@ -4476,7 +4477,7 @@ dirhash_fill(struct udf_node *dir_node)
 	free(fid, M_UDFTEMP);
 	free(dirent, M_UDFTEMP);
 
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -4507,7 +4508,7 @@ udf_lookup_name_in_dir(struct vnode *vp, const char *name, int namelen,
 	error = dirhash_fill(dir_node);
 	if (error) {
 		dirhash_put(dir_node->dir_hash);
-		return error;
+		return (error);
 	}
 	dirh = dir_node->dir_hash;
 
@@ -4546,7 +4547,7 @@ udf_lookup_name_in_dir(struct vnode *vp, const char *name, int namelen,
 
 	dirhash_put(dir_node->dir_hash);
 
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -4629,7 +4630,7 @@ udf_create_new_fe(struct udf_mount *ump, struct file_entry *fe, int file_type,
 
 	(void) udf_validate_tag_and_crc_sums((union dscrptr *) fe);
 
-	return fidsize;
+	return (fidsize);
 }
 
 /* --------------------------------------------------------------------- */
@@ -4698,7 +4699,7 @@ udf_create_new_efe(struct udf_mount *ump, struct extfile_entry *efe,
 
 	(void) udf_validate_tag_and_crc_sums((union dscrptr *) efe);
 
-	return fidsize;
+	return (fidsize);
 }
 
 /* --------------------------------------------------------------------- */
@@ -4726,7 +4727,7 @@ udf_dir_detach(struct udf_mount *ump, struct udf_node *dir_node,
 	error = dirhash_fill(dir_node);
 	if (error) {
 		dirhash_put(dir_node->dir_hash);
-		return error;
+		return (error);
 	}
 	dirh = dir_node->dir_hash;
 
@@ -4846,7 +4847,7 @@ error_out:
 
 	dirhash_put(dir_node->dir_hash);
 
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -4875,7 +4876,7 @@ udf_dir_update_rootentry(struct udf_mount *ump, struct udf_node *dir_node,
 	error = dirhash_fill(dir_node);
 	if (error) {
 		dirhash_put(dir_node->dir_hash);
-		return error;
+		return (error);
 	}
 	dirh = dir_node->dir_hash;
 
@@ -4963,7 +4964,7 @@ error_out:
 
 	dirhash_put(dir_node->dir_hash);
 
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -4998,7 +4999,7 @@ udf_dir_attach(struct udf_mount *ump, struct udf_node *dir_node,
 	error = dirhash_fill(dir_node);
 	if (error) {
 		dirhash_put(dir_node->dir_hash);
-		return error;
+		return (error);
 	}
 	dirh = dir_node->dir_hash;
 
@@ -5208,7 +5209,7 @@ error_out:
 
 	dirhash_put(dir_node->dir_hash);
 
-	return error;
+	return (error);
 }
 #endif
 
@@ -5234,13 +5235,13 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	lockmgr(nvp->v_vnlock, LK_EXCLUSIVE, NULL);
 	if ((error = insmntque(nvp, mp)) != 0) {
 		uma_zfree(udf_zone_node, unode);
-		return error;
+		return (error);
 	} 
 
 	/* TODO: Does this leak unode or vnodes? */
 	error = vfs_hash_insert(nvp, ino, flags, curthread, vpp, NULL, NULL);
 	if (error || *vpp != NULL)
-		return error;
+		return (error);
 
 	/* 
 	 * Load read and set up the unode structure.
@@ -5252,7 +5253,7 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 		vput(nvp);
 		ungetnewvnode(nvp);
 	}
-	return 
+	return
 }
 #endif
 
@@ -5289,7 +5290,7 @@ udf_get_node(struct udf_mount *ump, ino_t ino, struct udf_node **ppunode)
 	/* garbage check: translate udf_node_icb_loc to sectornr */
 	error = udf_translate_vtop(ump, &icb_loc, &sector, &dummy);
 	if (error) {
-		return EINVAL;
+		return (EINVAL);
 	}
 
 	/* initialise crosslinks, note location of fe/efe for hashing */
@@ -5415,7 +5416,7 @@ udf_get_node(struct udf_mount *ump, ino_t ino, struct udf_node **ppunode)
 	/* first round of cleanup code */
 	if (error) {
 		udf_dispose_node(udf_node);
-		return EINVAL;
+		return (EINVAL);
 	}
 
 	/* assert no references to dscr anymore beyong this point */
@@ -5496,14 +5497,14 @@ udf_get_node(struct udf_mount *ump, ino_t ino, struct udf_node **ppunode)
 	if (error) {
 		/* recycle udf_node */
 		udf_dispose_node(udf_node);
-		return EINVAL;		/* error code ok? */
+		return (EINVAL);		/* error code ok? */
 	}
 
 	/* TODO ext attr and streamdir udf_nodes */
 
 	*ppunode = udf_node;
 
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -5526,7 +5527,7 @@ udf_writeout_node(struct udf_node *udf_node, int waitfor)
 	if (udf_node->i_flags & IN_DELETED) {
 		DPRINTF(NODE, ("\tnode deleted; not writing out\n"));
 		udf_cleanup_reservation(udf_node);
-		return 0;
+		return (0);
 	}
 
 	/* lock node; unlocked in callback */
@@ -5550,7 +5551,7 @@ udf_writeout_node(struct udf_node *udf_node, int waitfor)
 			dscr = (union dscrptr *) udf_node->ext[extnr];
 			error = udf_write_logvol_dscr(udf_node, dscr, loc, 0);
 			if (error)
-				return error;
+				return (error);
 		}
 		/* mark allocation extents written out */
 		udf_node->i_flags &= ~(IN_NODE_REBUILD);
@@ -5569,7 +5570,7 @@ udf_writeout_node(struct udf_node *udf_node, int waitfor)
 	loc = &udf_node->write_loc;
 	error = udf_write_logvol_dscr(udf_node, dscr, loc, waitfor);
 
-	return error;
+	return (error);
 }
 #endif
 
@@ -5581,7 +5582,7 @@ udf_dispose_node(struct udf_node *udf_node)
 	int extnr;
 
 	if (!udf_node)
-		return 0;
+		return (0);
 
 /*	udf_cleanup_reservation(udf_node); */
 
@@ -5615,7 +5616,7 @@ udf_dispose_node(struct udf_node *udf_node)
 	udf_node->ump = (void *) 0xdeadbeef;
 	udf_free_node(udf_node);
 
-	return 0;
+	return (0);
 }
 
 
@@ -5649,7 +5650,7 @@ udf_create_node_raw(struct vnode *dvp, struct vnode **vpp, int udf_file_type,
 	/* allocate vnode */
 	error = getnewvnode(VT_UDF, ump->vfs_mountp, vnodeops, &nvp);
         if (error)
-		return error;
+		return (error);
 
 	/* lock node */
 	error = vn_lock(nvp, LK_EXCLUSIVE | LK_RETRY);
@@ -5749,7 +5750,7 @@ udf_create_node_raw(struct vnode *dvp, struct vnode **vpp, int udf_file_type,
 		vput(nvp);
 
 		*vpp = NULL;
-		return error;
+		return (error);
 	}
 
 	/* adjust file count */
@@ -5758,7 +5759,7 @@ udf_create_node_raw(struct vnode *dvp, struct vnode **vpp, int udf_file_type,
 	/* return result */
 	*vpp = nvp;
 
-	return 0;
+	return (0);
 
 error_out_unreserve:
 	udf_do_unreserve_space(ump, NULL, vpart_num, 1);
@@ -5770,7 +5771,7 @@ error_out_unget:
 	nvp->v_data = NULL;
 	ungetnewvnode(nvp);
 
-	return error;
+	return (error);
 }
 
 
@@ -5801,31 +5802,31 @@ udf_create_node(struct vnode *dvp, struct vnode **vpp, struct vattr *vap,
 	case VBLK :
 		udf_file_type = UDF_ICB_FILETYPE_BLOCKDEVICE;
 		/* specfs */
-		return ENOTSUP;
+		return (ENOTSUP);
 		break;
 	case VCHR :
 		udf_file_type = UDF_ICB_FILETYPE_CHARDEVICE;
 		/* specfs */
-		return ENOTSUP;
+		return (ENOTSUP);
 		break;
 	case VFIFO :
 		udf_file_type = UDF_ICB_FILETYPE_FIFO;
 		/* specfs */
-		return ENOTSUP;
+		return (ENOTSUP);
 		break;
 	case VSOCK :
 		udf_file_type = UDF_ICB_FILETYPE_SOCKET;
 		/* specfs */
-		return ENOTSUP;
+		return (ENOTSUP);
 		break;
 	case VNON :
 	case VBAD :
 	default :
 		/* nothing; can we even create these? */
-		return EINVAL;
+		return (EINVAL);
 	}
 
-	return udf_create_node_raw(dvp, vpp, udf_file_type, vnodeops, vap, cnp);
+	return (udf_create_node_raw(dvp, vpp, udf_file_type, vnodeops, vap, cnp));
 }
 
 /* --------------------------------------------------------------------- */
@@ -5915,7 +5916,7 @@ udf_resize_node(struct udf_node *udf_node, uint64_t new_size, int *extended)
 
 	/* if not changing, we're done */
 	if (file_size == new_size)
-		return 0;
+		return (0);
 
 	*extended = (new_size > file_size);
 	if (*extended) {
@@ -5924,7 +5925,7 @@ udf_resize_node(struct udf_node *udf_node, uint64_t new_size, int *extended)
 		error = udf_shrink_node(udf_node, new_size);
 	}
 
-	return error;
+	return (error);
 }
 
 
@@ -6070,7 +6071,7 @@ udf_update(struct vnode *vp, struct timespec *acc,
 
 	/* if called when mounted readonly, never write back */
 	if (vp->v_mount->mnt_flag & MNT_RDONLY)
-		return 0;
+		return (0);
 
 	/* check if the node is dirty 'enough'*/
 	if (updflags & UPDATE_CLOSE) {
@@ -6079,7 +6080,7 @@ udf_update(struct vnode *vp, struct timespec *acc,
 		flags = udf_node->i_flags & IN_MODIFIED;
 	}
 	if (flags == 0)
-		return 0;
+		return (0);
 
 	/* determine if we need to write sync or async */
 	waitfor = 0;
@@ -6090,9 +6091,9 @@ udf_update(struct vnode *vp, struct timespec *acc,
 			waitfor |= UPDATE_WAIT;
 	}
 	if (waitfor)
-		return VOP_FSYNC(vp, FSCRED, FSYNC_WAIT, 0,0);
+		return (VOP_FSYNC(vp, FSCRED, FSYNC_WAIT, 0,0));
 
-	return 0;
+	return (0);
 }
 #endif
 
@@ -6130,7 +6131,7 @@ udf_read_fid_stream(struct vnode *vp, uint64_t *offset,
 		file_size = le64toh(efe->inf_len);
 	}
 	if (*offset >= file_size)
-		return EINVAL;
+		return (EINVAL);
 
 	/* get maximum length of FID descriptor */
 	lb_size = le32toh(ump->logical_vol->lb_size);
@@ -6142,7 +6143,7 @@ udf_read_fid_stream(struct vnode *vp, uint64_t *offset,
 	enough  = (file_size - (*offset) >= UDF_FID_SIZE);
 	if (!enough) {
 		/* short dir ... */
-		return EIO;
+		return (EIO);
 	}
 
 	error = udf_read_node(dir_node, (uint8_t *)fid, *offset, 
@@ -6152,7 +6153,7 @@ udf_read_fid_stream(struct vnode *vp, uint64_t *offset,
 			UIO_SYSSPACE,  IO_NODELOCKED, FSCRED, 0, // IO_ALTSEMANTICS |
 			NULL, curthread);*/
 	if (error)
-		return error;
+		return (error);
 
 	/*
 	 * Check if we got a whole descriptor.
@@ -6185,14 +6186,13 @@ brokendir:
 		/* note that is sometimes a bit quick to report */
 		/* RESYNC? */
 		/* TODO: use udf_resync_fid_stream */
-		return EIO;
+		return (EIO);
 	}
 
 	/* advance */
 	*offset += fid_size;
 
-	return error;
-return 0;
+	return (error);
 }
 
 
@@ -6365,7 +6365,7 @@ udf_read_internal(struct udf_node *node, uint8_t *blob)
 	memset(blob, 0, sector_size);
 	memcpy(blob, pos, inflen);
 
-	return 0;
+	return (0);
 }
 
 
@@ -6404,7 +6404,7 @@ udf_write_internal(struct udf_node *node, uint8_t *blob)
 	/* memset(pos, 0, inflen); */
 	memcpy(pos, blob, inflen);
 
-	return 0;
+	return (0);
 }
 
 

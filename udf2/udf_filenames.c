@@ -44,20 +44,20 @@ udf_to_utf8(char **result, size_t *rrem, uint32_t ch)
 
 	if ((ch & 0xFFFFFF80) == 0) {
 		if (*rrem < 1)
-			return 0;
+			return (0);
 
 		n = 1;
 		rp[0] = ch & 0x7F;
 	} else if ((ch & 0xFFFFF800) == 0) {
 		if (*rrem < 2)
-			return 0;
+			return (0);
 
 		n = 2;
 		rp[0] = 0xC0 | (ch >> 6);
 		rp[1] = 0x80 | (0x3F & ch);
 	} else if ((ch & 0xFFFF0000) == 0) {
 		if (*rrem < 3)
-			return 0;
+			return (0);
 
 		n = 3;
 		rp[0] = 0xE0 | (ch >> 12);
@@ -65,7 +65,7 @@ udf_to_utf8(char **result, size_t *rrem, uint32_t ch)
 		rp[2] = 0x80 | (0x3F & ch);
 	} else if ((ch & 0xFFE00000) == 0) {
 		if (*rrem < 4)
-			return 0;
+			return (0);
 
 		n = 4;
 		rp[0] = 0xF0 | (ch >> 18);
@@ -74,12 +74,12 @@ udf_to_utf8(char **result, size_t *rrem, uint32_t ch)
 		rp[3] = 0x80 | (0x3F & ch);
 	} else {
 		/* do not convert points above 21 bits. */
-		return 0;
+		return (0);
 	}
 
 	*rrem -= n;
 	*result += n;
-	return n;
+	return (n);
 }
 
 static void 

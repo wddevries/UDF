@@ -245,7 +245,7 @@ udf_mount(struct mount *mp)
 				"writing, downgrading access to read-only\n");
 			mp->mnt_flag |= MNT_RDONLY;
 			/* FIXME we can't return error now on open failure */
-			return 0;
+			return (0);
 		}
 	}
 #endif
@@ -253,7 +253,7 @@ udf_mount(struct mount *mp)
 	/* TODO: Add some iconv code here. */
 
 	vfs_mountedfrom(mp, fspec);
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -302,7 +302,7 @@ udf_unmount(struct mount *mp, int mntflags)
 	 * from being flushed.
 	 */
 	if ((error = vflush(mp, 0, flags, curthread)) != 0)
-		return error;
+		return (error);
 
 	/* update nodes and wait for completion of writeout of system nodes */
 #if  0
@@ -315,11 +315,11 @@ udf_unmount(struct mount *mp, int mntflags)
 
 	/* flush again, to check if we are still busy for something else */
 	if ((error = vflush(ump->vfs_mountp, NULLVP, flags | SKIPSYSTEM)) != 0)
-		return error;
+		return (error);
 
 	/* close logical volume and close session if requested */
 	if ((error = udf_close_logvol(ump, mntflags)) != 0)
-		return error;
+		return (error);
 #ifdef DEBUG
 	DPRINTF(VOLUMES, ("FINAL sanity check\n"));
 	if (udf_verbose & UDF_DEBUG_LOCKING)
@@ -360,7 +360,7 @@ udf_unmount(struct mount *mp, int mntflags)
 	mp->mnt_flag &= ~MNT_LOCAL;
 	MNT_IUNLOCK(mp);
 
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -383,7 +383,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 #if 0
 	/* flush out any old buffers remaining from a previous use. */
 	if ((error = vinvalbuf(devvp, V_SAVE, l->l_cred, l, 0, 0)))
-		return error;
+		return (error);
 #endif
 
 	/* Open a consumer. */
@@ -498,14 +498,14 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	if ((1 << bshift) != ump->sector_size) {
 		printf("UDF mount: "
 		       "hit implementation fence on sector size\n");
-		return EIO;
+		return (EIO);
 	}
 
 	/* temporary check to overcome sectorsize >= 8192 bytes panic */
 	if (ump->sector_size >= 8192) {
 		printf("UDF mount: "
 			"hit implementation limit, sectorsize to big\n");
-		return EIO;
+		return (EIO);
 	}
 
 #if 0
@@ -516,12 +516,12 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	if ((mp->mnt_flag & MNT_RDONLY) == 0) {
 		if ((ump->discinfo.mmc_cur & MMC_CAP_RECORDABLE) == 0) {
 			printf("UDF mount: disc is not recordable\n");
-			return EROFS;
+			return (EROFS);
 		}
 		if (ump->discinfo.mmc_cur & MMC_CAP_SEQUENTIAL) {
 			if (ump->discinfo.disc_state == MMC_STATE_FULL) {
 				printf("UDF mount: disc is not appendable\n");
-				return EROFS;
+				return (EROFS);
 			}
 
 			/*
@@ -533,7 +533,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 		if (args->sessionnr != 0) {
 			printf("UDF mount: updating a previous session "
 				"not yet allowed\n");
-			return EROFS;
+			return (EROFS);
 		}
 	}
 #endif
@@ -619,7 +619,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	/* devvp->v_specmountpoint = mp; */
 
 	/* success! */
-	return 0;
+	return (0);
 
 fail:
 	if (cp != NULL) {
@@ -634,7 +634,7 @@ fail:
 		/*udf_discstrat_finish(VFSTOUDF(mp)); */
 		free_udf_mountinfo(mp);
 	}
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -652,9 +652,9 @@ udf_root(struct mount *mp, int flags, struct vnode **vpp)
 	error = udf_vget(mp, ino, flags, vpp);
 	if (!((*vpp)->v_vflag & VV_ROOT)) {
 		printf("NOT A ROOT NODE?");
-		return EDOOFUS;
+		return (EDOOFUS);
 	}
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -706,7 +706,7 @@ udf_statfs(struct mount *mp, struct statfs *sbp)
 	/*char	  f_mntfromname[MNAMELEN];*/  	/* mounted filesystem */
 	/*char	  f_mntonname[MNAMELEN];*/    	/* directory on which mounted */
 	
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -744,7 +744,7 @@ udf_sync_writeout_system_files(struct udf_mount *ump, int clearflags)
 			ump->lvclose &= ~UDF_WRITE_PART_BITMAPS;
 	}
 
-	return error;
+	return (error);
 }
 
 
@@ -756,11 +756,11 @@ udf_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 	DPRINTF(CALL, ("udf_sync called\n"));
 	/* if called when mounted readonly, just ignore */
 	if (mp->mnt_flag & MNT_RDONLY)
-		return 0;
+		return (0);
 
 	if (ump->syncing && !waitfor) {
 		printf("UDF: skipping autosync\n");
-		return 0;
+		return (0);
 	}
 
 	/* get sync lock */
@@ -775,7 +775,7 @@ udf_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 	DPRINTF(CALL, ("end of udf_sync()\n"));
 	ump->syncing = 0;
 
-	return 0;
+	return (0);
 }
 #endif
 
@@ -783,7 +783,7 @@ udf_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 struct udf_node *
 udf_alloc_node()
 {
-	return uma_zalloc(udf_zone_node, M_WAITOK | M_ZERO);
+	return (uma_zalloc(udf_zone_node, M_WAITOK | M_ZERO));
 }
 
 void 
@@ -812,7 +812,7 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 
 	error = vfs_hash_get(mp, ino, flags, curthread, vpp, NULL, NULL);
 	if (error || *vpp != NULL)
-		return error;
+		return (error);
 
 	if ((flags & LK_TYPE_MASK) == LK_SHARED) {
 		flags &= ~LK_TYPE_MASK;
@@ -822,16 +822,16 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	ump = VFSTOUDF(mp);
 	error = udf_getanode(mp, &nvp);
 	if (error)
-		return error;
+		return (error);
 	
 	lockmgr(nvp->v_vnlock, LK_EXCLUSIVE, NULL);
 	if ((error = insmntque(nvp, mp)) != 0)
-		return error;
+		return (error);
 
 	/* TODO: Does this leak unode or vnodes? */
 	error = vfs_hash_insert(nvp, ino, flags, curthread, vpp, NULL, NULL);
 	if (error || *vpp != NULL)
-		return error;
+		return (error);
 
 
 	/* 
@@ -906,7 +906,7 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 
 	*vpp = nvp;
 
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -927,7 +927,7 @@ udf_fhtovp(struct mount *mp, struct fid *fhp, int flags,
 	error = VFS_VGET(mp, ufid->ino, LK_EXCLUSIVE, &vp);
 	if (error != 0) {
 		*vpp = NULLVP;
-		return error;
+		return (error);
 	}
 
 	udf_node = VTOI(vp);
@@ -939,6 +939,6 @@ udf_fhtovp(struct mount *mp, struct fid *fhp, int flags,
 	vnode_create_vobject(vp, filelen, curthread);
 	*vpp = vp;
 
-	return 0;
+	return (0);
 }
 

@@ -53,7 +53,7 @@ udf_cksum(unsigned char *s, int n)
 
 	while (n-- > 0)
 		crc = crc_table[(crc>>8 ^ *s++) & 0xff] ^ (crc<<8);
-	return crc;
+	return (crc);
 }
 
 #if 0
@@ -70,7 +70,7 @@ udf_unicode_cksum(unsigned short *s, int n)
 		crc = crc_table[(crc>>8 ^ (*s>>8)) & 0xff] ^ (crc<<8);
 		crc = crc_table[(crc>>8 ^ (*s++ & 0xff)) & 0xff] ^ (crc<<8);
 	}
-	return crc;
+	return (crc);
 }
 #endif
 
@@ -91,7 +91,7 @@ uint16_t udf_ea_cksum(uint8_t *data) {
                checksum += *data++;
         }
 
-        return checksum;
+        return (checksum);
 }
 
 

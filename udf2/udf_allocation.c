@@ -455,7 +455,7 @@ udf_translate_vtop(struct udf_mount *ump, struct long_ad *icb_loc,
 	vpart  = le16toh(icb_loc->loc.part_num);
 	lb_num = le32toh(icb_loc->loc.lb_num);
 	if (vpart > UDF_VTOP_RAWPART)
-		return EINVAL;
+		return (EINVAL);
 
 translate_again:
 	part = ump->vtop[vpart];
@@ -466,38 +466,38 @@ translate_again:
 		/* 1:1 to the end of the device */
 		*lb_numres = lb_num;
 		*extres = INT_MAX;
-		return 0;
+		return (0);
 	case UDF_VTOP_TYPE_PHYS :
 		/* transform into its disc logical block */
 		if (lb_num > le32toh(pdesc->part_len))
-			return EINVAL;
+			return (EINVAL);
 		*lb_numres = lb_num + le32toh(pdesc->start_loc);
 
 		/* extent from here to the end of the partition */
 		*extres = le32toh(pdesc->part_len) - lb_num;
-		return 0;
+		return (0);
 	case UDF_VTOP_TYPE_VIRT :
 		/* only maps one logical block, lookup in VAT */
 		if (lb_num >= ump->vat_entries)		/* XXX > or >= ? */
-			return EINVAL;
+			return (EINVAL);
 
 		/* lookup in virtual allocation table file */
 		error = udf_vat_read(ump->vat_node,
 				(uint8_t *) &udf_rw32_lbmap, 4,
 				ump->vat_offset + lb_num * 4);
 		if (error)
-			return error;
+			return (error);
 
 		lb_num = le32toh(udf_rw32_lbmap);
 
 		/* transform into its disc logical block */
 		if (lb_num > le32toh(pdesc->part_len))
-			return EINVAL;
+			return (EINVAL);
 		*lb_numres = lb_num + le32toh(pdesc->start_loc);
 
 		/* just one logical block */
 		*extres = 1;
-		return 0;
+		return (0);
 	case UDF_VTOP_TYPE_SPARABLE :
 		/* check if the packet containing the lb_num is remapped */
 		lb_packet = lb_num / ump->sparable_packet_size;
@@ -509,18 +509,18 @@ translate_again:
 				/* NOTE maps to absolute disc logical block! */
 				*lb_numres = le32toh(sme->map) + lb_rel;
 				*extres    = ump->sparable_packet_size - lb_rel;
-				return 0;
+				return (0);
 			}
 		}
 
 		/* transform into its disc logical block */
 		if (lb_num > le32toh(pdesc->part_len))
-			return EINVAL;
+			return (EINVAL);
 		*lb_numres = lb_num + le32toh(pdesc->start_loc);
 
 		/* rest of block */
 		*extres = ump->sparable_packet_size - lb_rel;
-		return 0;
+		return (0);
 	case UDF_VTOP_TYPE_META :
 printf("Metadata Partition Translated\n");
 		/* we have to look into the file's allocation descriptors */
@@ -538,7 +538,7 @@ printf("Metadata Partition Translated\n");
 				slot, &s_icb_loc, &eof);
 			if (eof) {
 				UDF_UNLOCK_NODE(ump->metadata_node, 0);
-				return EINVAL;
+				return (EINVAL);
 			}
 			len   = le32toh(s_icb_loc.len);
 			flags = UDF_EXT_FLAGS(len);
@@ -567,7 +567,7 @@ printf("Metadata Partition Translated\n");
 
 		UDF_UNLOCK_NODE(ump->metadata_node, 0);
 		if (flags != UDF_EXT_ALLOCATED)
-			return EINVAL;
+			return (EINVAL);
 
 		/*
 		 * vpart and lb_num are updated, translate again since we
@@ -579,7 +579,7 @@ printf("Metadata Partition Translated\n");
 			ump->vtop_tp[vpart]);
 	}
 
-	return EINVAL;
+	return (EINVAL);
 }
 
 
@@ -624,7 +624,7 @@ udf_bmap_translate(struct udf_node *udf_node, uint32_t block,
 
 
 	if (!udf_node)
-		return ENOENT;
+		return (ENOENT);
 
 	KASSERT(num_lb > 0,("num_lb > 0"));
 
@@ -647,7 +647,7 @@ udf_bmap_translate(struct udf_node *udf_node, uint32_t block,
 		*exttype = UDF_TRAN_INTERN;
 		*maxblks = 1;
 		UDF_UNLOCK_NODE(udf_node, 0);
-		return 0;
+		return (0);
 	}
 
 	/* find first overlapping extent */
@@ -657,7 +657,7 @@ udf_bmap_translate(struct udf_node *udf_node, uint32_t block,
 		udf_get_adslot(udf_node, slot, &s_ad, &eof);
 		if (eof) {
 			UDF_UNLOCK_NODE(udf_node, 0);
-			return EINVAL;
+			return (EINVAL);
 		}
 		len    = le32toh(s_ad.len);
 		flags  = UDF_EXT_FLAGS(len);
@@ -703,19 +703,19 @@ udf_bmap_translate(struct udf_node *udf_node, uint32_t block,
 				&t_ad, &transsec32, &translen);
 		if (error) {
 			UDF_UNLOCK_NODE(udf_node, 0);
-			return error;
+			return (error);
 		}
 		*lsector = transsec32;
 		*maxblks = MIN(ext_remain, translen);
 		break;
 	default:
 		UDF_UNLOCK_NODE(udf_node, 0);
-		return EINVAL;
+		return (EINVAL);
 	}
 
 	UDF_UNLOCK_NODE(udf_node, 0);
 
-	return 0;
+	return (0);
 }
 /* --------------------------------------------------------------------- */
 
@@ -744,7 +744,7 @@ udf_translate_file_extent(struct udf_node *udf_node,
 	int slot, addr_type, icbflags;
 
 	if (!udf_node)
-		return ENOENT;
+		return (ENOENT);
 
 	KASSERT(num_lb > 0);
 
@@ -766,7 +766,7 @@ udf_translate_file_extent(struct udf_node *udf_node,
 	if (addr_type == UDF_ICB_INTERN_ALLOC) {
 		*map = UDF_TRANS_INTERN;
 		UDF_UNLOCK_NODE(udf_node, 0);
-		return 0;
+		return (0);
 	}
 
 	/* find first overlapping extent */
@@ -785,7 +785,7 @@ udf_translate_file_extent(struct udf_node *udf_node,
 				("Translate file extent "
 				 "failed: can't seek location\n"));
 			UDF_UNLOCK_NODE(udf_node, 0);
-			return EINVAL;
+			return (EINVAL);
 		}
 		len    = le32toh(s_ad.len);
 		flags  = UDF_EXT_FLAGS(len);
@@ -820,7 +820,7 @@ udf_translate_file_extent(struct udf_node *udf_node,
 				("Translate file extent "
 				 "failed: past eof\n"));
 			UDF_UNLOCK_NODE(udf_node, 0);
-			return EINVAL;
+			return (EINVAL);
 		}
 	
 		len    = le32toh(s_ad.len);
@@ -864,7 +864,7 @@ udf_translate_file_extent(struct udf_node *udf_node,
 				transsec = transsec32;
 				if (error) {
 					UDF_UNLOCK_NODE(udf_node, 0);
-					return error;
+					return (error);
 				}
 				while (overlap && num_lb && translen) {
 					*map++ = transsec;
@@ -877,7 +877,7 @@ udf_translate_file_extent(struct udf_node *udf_node,
 					("Translate file extent "
 					 "failed: bad flags %x\n", flags));
 				UDF_UNLOCK_NODE(udf_node, 0);
-				return EINVAL;
+				return (EINVAL);
 			}
 		}
 		if (num_lb == 0)
@@ -889,7 +889,7 @@ udf_translate_file_extent(struct udf_node *udf_node,
 	}
 	UDF_UNLOCK_NODE(udf_node, 0);
 
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -954,7 +954,7 @@ udf_search_free_vatloc(struct udf_mount *ump, uint32_t *lbnumres)
 
 	free(blob, M_UDFTEMP);
 	*lbnumres = lb_num;
-	return 0;
+	return (0);
 }
 
 
@@ -1093,7 +1093,7 @@ udf_bitmap_check_trunc_free(struct udf_bitmap *bitmap, uint32_t to_trunc)
 	}
 
 	DPRINTF(RESERVE, ("\tfound %d sequential free bits in bitmap\n", seq_free));
-	return seq_free;
+	return (seq_free);
 }
 
 /* --------------------------------------------------------------------- */
@@ -1196,7 +1196,7 @@ udf_reserve_space(struct udf_mount *ump, struct udf_node *udf_node,
 	}
 
 	mutex_exit(&ump->allocate_mutex);
-	return error;
+	return (error);
 }
 
 
@@ -1376,7 +1376,7 @@ udf_allocate_space(struct udf_mount *ump, struct udf_node *udf_node,
 #endif
 	mutex_exit(&ump->allocate_mutex);
 
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -1575,14 +1575,14 @@ udf_trunc_metadatapart(struct udf_mount *ump, uint32_t num_lb)
 
 	/* scale down if needed and bail out when out of space */
 	if (to_trunc >= meta_free_lbs)
-		return num_lb;
+		return (num_lb);
 
 	/* check extent of bits marked free at the end of the map */
 	bitmap = &ump->metadata_unalloc_bits;
 	to_trunc = udf_bitmap_check_trunc_free(bitmap, to_trunc);
 	to_trunc = unit * (to_trunc / unit);		/* round down again */
 	if (to_trunc == 0)
-		return num_lb;
+		return (num_lb);
 
 	DPRINTF(RESERVE, ("\ttruncating %d lbs from the metadata bitmap\n",
 		to_trunc));
@@ -1644,8 +1644,8 @@ udf_trunc_metadatapart(struct udf_mount *ump, uint32_t num_lb)
 	mutex_enter(&ump->allocate_mutex);
 
 	if (to_trunc > num_lb)
-		return 0;
-	return num_lb - to_trunc;
+		return (0);
+	return (num_lb - to_trunc);
 }
 
 
@@ -1788,16 +1788,16 @@ udf_ads_merge(uint32_t lb_size, struct long_ad *a1, struct long_ad *a2)
 
 	/* defines same space */
 	if (a1_flags != a2_flags)
-		return 1;
+		return (1);
 
 	if (a1_flags != UDF_EXT_FREE) {
 		/* the same partition */
 		if (a1_part != a2_part)
-			return 1;
+			return (1);
 
 		/* a2 is successor of a1 */
 		if (a1_lbnum * lb_size + a1_len != a2_lbnum * lb_size)
-			return 1;
+			return (1);
 	}
 
 	/* merge as most from a2 if possible */
@@ -1811,10 +1811,10 @@ udf_ads_merge(uint32_t lb_size, struct long_ad *a1, struct long_ad *a2)
 	a2->loc.lb_num = le32toh(a2_lbnum);
 
 	if (a2_len > 0)
-		return 1;
+		return (1);
 
 	/* there is space over to merge */
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -2138,7 +2138,7 @@ udf_append_adslot(struct udf_node *udf_node, int *slot, struct long_ad *icb) {
 					vpart_num, 1, /* can fail */ false);
 			if (error) {
 				printf("UDF: couldn't reserve space for AED!\n");
-				return error;
+				return (error);
 			}
 			error = udf_allocate_space(ump, NULL, UDF_C_NODE,
 					vpart_num, 1, &lmapping);
@@ -2228,7 +2228,7 @@ udf_append_adslot(struct udf_node *udf_node, int *slot, struct long_ad *icb) {
 		*l_ad_p = le32toh(l_ad);
 	}
 
-	return 0;
+	return (0);
 }
 
 /* --------------------------------------------------------------------- */
@@ -2760,7 +2760,7 @@ udf_grow_node(struct udf_node *udf_node, uint64_t new_size)
 			KASSERT(new_inflen == orig_inflen + size_diff);
 			KASSERT(new_lbrec == orig_lbrec);
 			KASSERT(new_lbrec == 0);
-			return 0;
+			return (0);
 		}
 
 		DPRINTF(ALLOC, ("\tCONVERT from internal\n"));
@@ -2929,7 +2929,7 @@ errorout:
 	KASSERT(new_inflen == orig_inflen + size_diff);
 	KASSERT(new_lbrec == orig_lbrec);
 
-	return error;
+	return (error);
 }
 
 /* --------------------------------------------------------------------- */
@@ -3032,7 +3032,7 @@ udf_shrink_node(struct udf_node *udf_node, uint64_t new_size)
 		KASSERT(new_lbrec == orig_lbrec);
 		KASSERT(new_lbrec == 0);
 
-		return 0;
+		return (0);
 	}
 
 	/* setup node cleanup extents copy space */
@@ -3191,7 +3191,7 @@ udf_shrink_node(struct udf_node *udf_node, uint64_t new_size)
 			KASSERT(new_inflen == 0);
 			KASSERT(new_lbrec == 0);
 
-			return 0;
+			return (0);
 		}
 
 		printf("UDF_SHRINK_NODE: could convert to internal alloc!\n");
@@ -3271,6 +3271,6 @@ errorout:
 
 	KASSERT(new_inflen == orig_inflen - size_diff);
 
-	return error;
+	return (error);
 }
 #endif

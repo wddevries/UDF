@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) Will DeVries
+ * Copyright (c) 2012 Will DeVries
  * Copyright (c) 2007, 2008 Reinoud Zandijk
  * All rights reserved.
  * 
@@ -283,14 +283,14 @@ udf_read_node(struct udf_node *unode, uint8_t *blob, off_t start, int length)
 	if (addr_type == UDF_ICB_INTERN_ALLOC) {
 		numb = min(length, file_size - fileblkoff);
 		memcpy(blob, pos + fileblkoff, numb);
-		return error;
+		return (error);
 	}
 
 	while (length) {
 		error = udf_bmap_translate(unode, fileblk, &exttype, &lsect,
 		    &numlsect);
 		if (error)
-			return error;
+			return (error);
 
 		if (exttype == UDF_TRAN_ZERO) {
 			numb = min(length, sector_size * numlsect - fileblkoff);
@@ -299,14 +299,14 @@ udf_read_node(struct udf_node *unode, uint8_t *blob, off_t start, int length)
 			blob += numb;
 			fileblkoff = 0;
 		} else if (exttype == UDF_TRAN_INTERN) {
-			return EDOOFUS;
+			return (EDOOFUS);
 		} else {
 			while (numlsect > 0) {
 				if ((error = bread(devvp, lsect*blkinsect, sector_size, NOCRED,
 				   		&bp)) != 0) {
 					if (buf != NULL)
 						brelse(bp);
-					return error;
+					return (error);
 				}
 		
 				numb = min(length, sector_size - fileblkoff);
@@ -346,7 +346,7 @@ udf_read_phys_sectors(struct udf_mount *ump, int what, void *blob,
 				   &bp)) != 0) {
 			if (buf != NULL)
 				brelse(bp);
-			return error;
+			return (error);
 		}
 
 		bcopy(bp->b_data, blob, sector_size);
@@ -406,7 +406,7 @@ udf_read_phys_sectors(struct udf_mount *ump, int what, void *blob,
 	error = biowait(buf);
 	putiobuf(buf);
 
-	return error;
+	return (error);
 #endif
 }
 
@@ -442,7 +442,7 @@ udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
 				/* return no error but with no dscrptr */
 				/* dispose first block */
 				free(dst, mtype);
-				return 0;
+				return (0);
 			}
 		}
 		/* calculate descriptor size */
@@ -459,7 +459,7 @@ udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
 		new_dst = realloc(dst, dscrlen, mtype, M_WAITOK);
 		if (new_dst == NULL) {
 			free(dst, mtype);
-			return ENOMEM;
+			return (ENOMEM);
 		}
 		dst = new_dst;
 
@@ -477,7 +477,7 @@ udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
 	}
 	*dstp = dst;
 
-	return error;
+	return (error);
 }
 
 
@@ -569,7 +569,7 @@ udf_write_phys_sectors(struct udf_mount *ump, int what, void *blob,
 	error = biowait(buf);
 	putiobuf(buf);
 
-	return error;
+	return (error);
 }
 
 
@@ -612,7 +612,7 @@ udf_write_phys_dscr_sync(struct udf_mount *ump, struct udf_node *udf_node, int w
 	error = biowait(buf);
 	putiobuf(buf);
 
-	return error;
+	return (error);
 }
 
 
@@ -680,7 +680,7 @@ udf_create_logvol_dscr(struct udf_mount *ump, struct udf_node *udf_node, struct 
 	error = (strategy->create_logvol_dscr)(&args);
 	*dscrptr = args.dscr;
 
-	return error;
+	return (error);
 }
 
 
@@ -716,7 +716,7 @@ udf_read_logvol_dscr(struct udf_mount *ump, struct long_ad *icb,
 	error = (strategy->read_logvol_dscr)(&args);
 	*dscrptr = args.dscr;
 
-	return error;
+	return (error);
 }
 
 
@@ -736,7 +736,7 @@ udf_write_logvol_dscr(struct udf_node *udf_node, union dscrptr *dscr,
 	args.waitfor  = waitfor;
 
 	error = (strategy->write_logvol_dscr)(&args);
-	return error;
+	return (error);
 }
 
 
