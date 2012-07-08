@@ -228,6 +228,7 @@ set_charset(char **cs_disk, char **cs_local, const char *localcs)
 	return (0);
 }
 
+#if 0
 static void
 get_session_info_cd(int fd, struct udf_session_info *usi)
 {
@@ -242,7 +243,7 @@ get_session_info_cd(int fd, struct udf_session_info *usi)
 
 	error = ioctl(fd, CDIOREADTOCENTRYS, &t);
 	if (error) {
-		warn("This device does not support locating the last written block.");
+		warnx("This device does not support locating the last written block.");
 		usi->session_end_addr = 0;
 	} else {
 		usi->session_end_addr = (unsigned int)te.addr.lba;
@@ -252,6 +253,7 @@ get_session_info_cd(int fd, struct udf_session_info *usi)
 
 	return;
 }
+#endif
 
 static void
 get_session_info(char *dev, struct udf_session_info *usi, int session_num)
@@ -265,13 +267,15 @@ get_session_info(char *dev, struct udf_session_info *usi, int session_num)
 
 	bzero(usi, sizeof(struct udf_session_info));
 	usi->session_num = session_num;
-	error = ioctl(fd, UDFIOTEST, usi);
+	error = ioctl(fd, UDFIOREADDISCINFO, usi);
 	if (error != 0) {
+#if 0
 		if (session_num == 0) {
-			warn("This device does not support multiple sessions");
+			warnx("This device does not support multiple sessions.");
 			get_session_info_cd(fd, usi);
 		} else
-			err(2, "This device does not support multiple sessions");
+#endif
+		errx(EX_USAGE, "This device does not support multiple sessions.");
 	}
 
 	close(fd);

@@ -937,22 +937,17 @@ udf_read_anchors(struct udf_mount *ump)
 {
 	struct anchor_vdp **anchorsp;
 	int error, anch, ok, first_anchor;
-	uint32_t positions[4], track_start, track_end;
+	uint32_t positions[4], session_start, session_end;
 
-	track_start = ump->session_start;
-	track_end = ump->session_end;
+	session_start = ump->session_start;
+	session_end = ump->session_end;
 
 	/* read anchors start+256, start+512, end-256, end */
-	positions[0] = track_start+256;
-	if (track_end) {
-		positions[1] =   track_end-256;
-		positions[2] =   track_end;
-	} else {
-		positions[1] =   0;
-		positions[2] =   0;
-	}
-	positions[3] = track_start+512;	/* [UDF 2.60/6.11.2] */
+	positions[0] = session_start + 256;
+	positions[1] = session_end - 256;
+	positions[2] = session_end;
 	/* XXX shouldn't +512 be prefered above +256 for compat with Roxio CD */
+	positions[3] = session_start + 512; /* [UDF 2.60/6.11.2] */
 
 	ok = 0;
 	anchorsp = ump->anchors;
@@ -960,7 +955,7 @@ udf_read_anchors(struct udf_mount *ump)
 	if (ump->first_trackblank)
 		first_anchor = 1;
 	for (anch = first_anchor; anch < 4; anch++) {
-		if (positions[anch]) {
+		if (positions[anch] <= session_end) {
 			error = udf_read_anchor(ump, positions[anch], anchorsp);
 			if (!error) {
 				anchorsp++;
@@ -3015,25 +3010,14 @@ udf_search_vat(struct udf_mount *ump)
 	struct udf_node *vat_node;
 	ino_t ino;
 	int error;
-	uint32_t early_vat_loc, late_vat_loc, vat_loc;
+	uint32_t early_vat_loc, vat_loc;
 	uint16_t tagid;
 	uint8_t file_type;
 
 	vat_node = NULL;
 
-	/* If we don't know the end of the session, we can not search for the 
-	VAT. */
-	if (ump->last_possible_vat_location == 0)
-		return (ENOENT);
-	
-	vat_loc = ump->last_possible_vat_location;
-	if (vat_loc > 256)
-		early_vat_loc = vat_loc - 256; /* 8 blocks of 32 sectors */
-	else
-		early_vat_loc = 0;
-
-	early_vat_loc = MAX(early_vat_loc, ump->first_possible_vat_location);
-	late_vat_loc  = vat_loc + 1024;
+	early_vat_loc = ump->first_possible_vat_location;
+	vat_loc  = ump->last_possible_vat_location;
 
 	/* start looking from the end of the range */
 	do {

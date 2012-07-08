@@ -1,5 +1,5 @@
 diff --git sys/cam/scsi/scsi_cd.c sys/cam/scsi/scsi_cd.c
-index d45d49a..0d64578 100644
+index d45d49a..56f071d 100644
 --- sys/cam/scsi/scsi_cd.c
 +++ sys/cam/scsi/scsi_cd.c
 @@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
@@ -37,13 +37,13 @@ index d45d49a..0d64578 100644
  
  		break;
  	}
-+	case UDFIOTEST: {
++	case UDFIOREADDISCINFO: {
 +		struct udf_session_info  *usi;
 +
 +		usi = (struct udf_session_info *)addr;
 +
 +		CAM_DEBUG(periph->path, CAM_DEBUG_SUBTRACE, 
-+			  ("trying to do UDFIOTEST\n"));
++			  ("trying to do UDFIOREADDISCINFO\n"));
 +		
 +		error = udfreaddiscinfo(periph, usi);
 +
@@ -610,7 +610,7 @@ index f502d66..9933b0c 100644
  	u_int8_t op_code;
 diff --git sys/sys/udfio.h sys/sys/udfio.h
 new file mode 100644
-index 0000000..8260f00
+index 0000000..e8d17c8
 --- /dev/null
 +++ sys/sys/udfio.h
 @@ -0,0 +1,29 @@
@@ -640,6 +640,6 @@ index 0000000..8260f00
 +	uint16_t session_first_track;
 +	uint16_t session_last_track;
 +};
-+#define	UDFIOTEST	_IOWR('c',300, struct udf_session_info)
++#define	UDFIOREADDISCINFO	_IOWR('c',300, struct udf_session_info)
 +
 +#endif /* !_SYS_UDFIO_H_ */

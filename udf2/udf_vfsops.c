@@ -376,7 +376,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	struct cdev *dev;
 	struct udf_mount     *ump = NULL;
 	int    num_anchors, error, len, *udf_flags;
-	uint32_t bshift, logvol_integrity; /*lb_size,*/
+	uint32_t bshift, logvol_integrity, numsecs; /*lb_size,*/
 	char *cs_disk, *cs_local;
 	void *optdata;
 
@@ -469,15 +469,28 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	}
 	ump->session_end = *(uint32_t *)optdata;
 
-	/* These could hold different in the future. */
-	ump->first_possible_vat_location = ump->session_start;
+	/* We do not want the session_end value to be zero. */
+	numsecs = cp->provider->mediasize / cp->provider->sectorsize;
+	if (ump->session_end == 0)
+		ump->session_end = numsecs;
+
+	/* This is a hack. It should not happen, but does. */
+	if (ump->session_end > numsecs)
+		ump->session_end = numsecs;
+
+	/* We should only need to search one, so this is also a hack. */
+	if (ump->session_end - ump->session_start > 256)
+		ump->first_possible_vat_location = ump->session_end - 256; 
+	else
+		ump->first_possible_vat_location = ump->session_start;
 	ump->last_possible_vat_location = ump->session_end;
 
 	if (ump->flags & UDFMNT_KICONV && udf2_iconv) {
 		cs_disk = "UTF-16BE";
 
 		cs_local = NULL;
-		error = vfs_getopt(mp->mnt_optnew, "cs_local", (void **)&cs_local, &len);
+		error = vfs_getopt(mp->mnt_optnew, "cs_local", 
+		    (void **)&cs_local, &len);
 		if (error != 0 || cs_local[len-1] != '\0') {
 			error = EINVAL;
 			goto fail;
@@ -543,7 +556,6 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	ump->strategy = &udf_strat_bootstrap;
 	udf_discstrat_init(ump);
 #endif
-
 	/* read all anchors to get volume descriptor sequence */
 	num_anchors = udf_read_anchors(ump);
 	if (num_anchors == 0) {
