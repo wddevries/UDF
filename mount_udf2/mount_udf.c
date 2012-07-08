@@ -269,13 +269,16 @@ get_session_info(char *dev, struct udf_session_info *usi, int session_num)
 	usi->session_num = session_num;
 	error = ioctl(fd, UDFIOREADDISCINFO, usi);
 	if (error != 0) {
-#if 0
-		if (session_num == 0) {
-			warnx("This device does not support multiple sessions.");
-			get_session_info_cd(fd, usi);
-		} else
-#endif
-		errx(EX_USAGE, "This device does not support multiple sessions.");
+		if (session_num != 0)
+			errx(EX_USAGE, "Cannot mount selected session.  This "
+			    "device does not properly support multi-sessions disc.");
+		
+		warnx("Warning, this device does not properly support "
+		    "multi-sessions disc.");
+
+		/* We populate the end address inside the kernel. */
+		usi->session_start_addr = 0;
+		usi->session_end_addr = 0;
 	}
 
 	close(fd);
