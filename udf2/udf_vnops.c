@@ -95,14 +95,13 @@ struct vop_vector udf_fifoops = {
 };
 
 /* implementations of vnode functions; table follows at end */
-/* --------------------------------------------------------------------- */
+
 
 int
 udf_getanode(struct mount *mp, struct vnode **vpp)
 {
 	return (getnewvnode("udf2", mp, &udf_vnodeops, vpp));
 }
-
 
 #if 0 
 int
@@ -161,8 +160,6 @@ udf_inactive(void *v)
 	return (0);
 }
 #endif
-/* --------------------------------------------------------------------- */
-
 
 static int
 udf_reclaim(struct vop_reclaim_args *ap)
@@ -195,7 +192,6 @@ udf_reclaim(struct vop_reclaim_args *ap)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
 static int
 udf_read(struct vop_read_args *ap)
 {
@@ -256,7 +252,7 @@ udf_read(struct vop_read_args *ap)
 
 	return (error);
 }
-/* --------------------------------------------------------------------- */
+
 #if 0
 int
 udf_write(void *v)
@@ -406,7 +402,6 @@ udf_write(void *v)
 }
 #endif
 
-/* --------------------------------------------------------------------- */
 static int
 udf_bmap(struct vop_bmap_args /* {
 		struct vop_generic_args a_gen;
@@ -508,8 +503,6 @@ udf_strategy(struct vop_strategy_args *ap)
 	return (bp->b_error);
 }
 
-
-/* --------------------------------------------------------------------- */
 /* TODO: Needs lots of work */
 static int
 udf_readdir(struct vop_readdir_args /* {
@@ -696,8 +689,6 @@ bail:
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
-
 static int
 udf_cachedlookup(struct vop_cachedlookup_args *ap)
 {
@@ -856,7 +847,6 @@ exit:
 #endif
 }
 
-/* --------------------------------------------------------------------- */
 /* This is finished */
 static int
 udf_getattr(struct vop_getattr_args *ap)
@@ -988,7 +978,6 @@ udf_getattr(struct vop_getattr_args *ap)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
 #if 0
 static int
 udf_chown(struct vnode *vp, uid_t new_uid, gid_t new_gid,
@@ -1038,7 +1027,6 @@ udf_chown(struct vnode *vp, uid_t new_uid, gid_t new_gid,
 	return (0);
 }
 
-
 static int
 udf_chmod(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 {
@@ -1073,7 +1061,6 @@ udf_chmod(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 
 	return (0);
 }
-
 
 /* exported */
 int
@@ -1127,7 +1114,6 @@ udf_chsize(struct vnode *vp, u_quad_t newsize, kauth_cred_t cred)
 	return (error);
 }
 
-
 static int
 udf_chflags(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 {
@@ -1138,7 +1124,6 @@ udf_chflags(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 
 	return (0);
 }
-
 
 static int
 udf_chtimes(struct vnode *vp,
@@ -1247,8 +1232,6 @@ udf_setattr(struct vop_setattr_args *ap)
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
-
 /*
  * Return POSIX pathconf information for UDF file systems.
  */
@@ -1293,9 +1276,6 @@ udf_pathconf(struct vop_pathconf_args *ap)
 	return (EINVAL);
 }
 
-
-/* --------------------------------------------------------------------- */
-
 static int
 udf_open(struct vop_open_args *ap)
 {
@@ -1322,8 +1302,6 @@ udf_open(struct vop_open_args *ap)
 	return (0);
 }
 
-
-/* --------------------------------------------------------------------- */
 #if 0
 int
 udf_close(void *v)
@@ -1358,7 +1336,6 @@ udf_close(void *v)
 }
 #endif
 
-/* --------------------------------------------------------------------- */
 static int
 udf_access(struct vop_access_args *ap)
 {
@@ -1421,7 +1398,6 @@ udf_access(struct vop_access_args *ap)
 	return (vaccess(vp->v_type, mode, uid, gid, accmode, ap->a_cred, NULL));
 }
 
-/* --------------------------------------------------------------------- */
 #if 0
 int
 udf_create(void *v)
@@ -1447,8 +1423,6 @@ udf_create(void *v)
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
-
 int
 udf_mknod(void *v)
 {
@@ -1473,8 +1447,6 @@ udf_mknod(void *v)
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
-
 int
 udf_mkdir(void *v)
 {
@@ -1498,8 +1470,6 @@ udf_mkdir(void *v)
 	vput(dvp);
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 static int
 udf_do_link(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
@@ -1569,8 +1539,6 @@ udf_link(void *v)
 
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 static int
 udf_do_symlink(struct udf_node *udf_node, char *target)
@@ -1685,7 +1653,6 @@ udf_do_symlink(struct udf_node *udf_node, char *target)
 	return (error);
 }
 
-
 int
 udf_symlink(void *v)
 {
@@ -1723,7 +1690,6 @@ udf_symlink(void *v)
 	return (error);
 }
 #endif
-/* --------------------------------------------------------------------- */
 
 int
 udf_readlink(struct vop_readlink_args *ap)
@@ -1867,8 +1833,6 @@ udf_readlink(struct vop_readlink_args *ap)
 
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 /*
  * Check if source directory is in the path of the target directory.  Target
@@ -2120,8 +2084,6 @@ out_unlocked:
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
-
 int
 udf_remove(void *v)
 {
@@ -2160,8 +2122,6 @@ udf_remove(void *v)
 
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 int
 udf_rmdir(void *v)
@@ -2217,8 +2177,6 @@ udf_rmdir(void *v)
 
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 int
 udf_fsync(void *v)
@@ -2307,8 +2265,6 @@ udf_fsync(void *v)
 
 	return (0);
 }
-
-/* --------------------------------------------------------------------- */
 
 int
 udf_advlock(void *v)

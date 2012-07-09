@@ -55,7 +55,6 @@ struct iconv_functions *udf2_iconv = NULL;
 
 static int udf_mountfs(struct vnode *, struct mount *); 
 
-/* --------------------------------------------------------------------- */
 
 /* predefine vnode-op list descriptor */
 
@@ -81,7 +80,6 @@ VFS_SET(udf_vfsops, udf2, VFCF_READONLY);
 
 MODULE_VERSION(udf2, 1);
 
-/* --------------------------------------------------------------------- */
 
 static int
 udf_init(struct vfsconf *notused)
@@ -109,8 +107,6 @@ udf_uninit(struct vfsconf *notused)
 
 	return (0);
 }
-
-/* --------------------------------------------------------------------- */
 
 #define MPFREE(a, lst) \
 	if ((a)) free((a), lst);
@@ -173,9 +169,6 @@ free_udf_mountinfo(struct mount *mp)
 	}
 }
 #undef MPFREE
-
-/* --------------------------------------------------------------------- */
-
 
 static int
 udf_mount(struct mount *mp)
@@ -256,7 +249,7 @@ udf_mount(struct mount *mp)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
+
 #if 0
 #ifdef DEBUG
 static void
@@ -363,12 +356,9 @@ udf_unmount(struct mount *mp, int mntflags)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
-
 /*
  * Helper function of udf_mount() that actually mounts the disc.
  */
-
 static int
 udf_mountfs(struct vnode *devvp, struct mount *mp)
 {
@@ -649,8 +639,6 @@ fail:
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
-
 int
 udf_root(struct mount *mp, int flags, struct vnode **vpp)
 {
@@ -668,8 +656,6 @@ udf_root(struct mount *mp, int flags, struct vnode **vpp)
 	}
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 int
 udf_statfs(struct mount *mp, struct statfs *sbp)
@@ -720,8 +706,6 @@ udf_statfs(struct mount *mp, struct statfs *sbp)
 	
 	return (0);
 }
-
-/* --------------------------------------------------------------------- */
 
 /*
  * TODO what about writing out free space maps, lvid etc? only on `waitfor'
@@ -803,7 +787,6 @@ udf_free_node(struct udf_node *unode)
 {
 	uma_zfree(udf_zone_node, unode);
 }
-/* --------------------------------------------------------------------- */
 
 /*
  * Get vnode for the file system type specific file id ino for the fs. Its
@@ -920,8 +903,6 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 
 	return (0);
 }
-
-/* --------------------------------------------------------------------- */
 
 /*
  * Lookup vnode for file handle specified

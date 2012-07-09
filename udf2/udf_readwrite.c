@@ -40,7 +40,6 @@
 
 static int udf_read_phys_sectors(struct udf_mount *ump, int what, void *blob,
 	uint32_t start, uint32_t sectors);
-/* --------------------------------------------------------------------- */
 
 #if 0
 void
@@ -239,8 +238,6 @@ udf_fixup_node_internals(struct udf_mount *ump, uint8_t *blob, int udf_c_type)
 }
 #endif
 
-/* --------------------------------------------------------------------- */
-
 /*
  * Set of generic descriptor readers and writers and their helper functions.
  * Descriptors inside `logical space' i.e. inside logically mapped partitions
@@ -410,7 +407,6 @@ udf_read_phys_sectors(struct udf_mount *ump, int what, void *blob,
 #endif
 }
 
-
 /* synchronous generic descriptor read */
 int
 udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
@@ -479,7 +475,6 @@ udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
 
 	return (error);
 }
-
 
 #if 0
 static void
@@ -659,9 +654,6 @@ udf_write_phys_dscr_async(struct udf_mount *ump, struct udf_node *udf_node,
 	return 0;
 }
 
-/* --------------------------------------------------------------------- */
-
-/* disc strategy dispatchers */
 
 int
 udf_create_logvol_dscr(struct udf_mount *ump, struct udf_node *udf_node, struct long_ad *icb,
@@ -778,5 +770,4 @@ void udf_discstrat_finish(struct udf_mount *ump)
 	}
 }
 #endif
-/* --------------------------------------------------------------------- */
 

@@ -55,8 +55,6 @@ static void udf_count_alloc_exts(struct udf_node *udf_node);
  * searching for the same or adjacent position again.
  */
 
-/* --------------------------------------------------------------------- */
-
 #if 0
 #if 1
 static void
@@ -340,7 +338,6 @@ udf_node_sanity_check(struct udf_node *udf_node,
 }
 #endif
 #endif
-/* --------------------------------------------------------------------- */
 
 void
 udf_calc_freespace(struct udf_mount *ump, uint64_t *sizeblks, uint64_t *freeblks)
@@ -359,7 +356,7 @@ udf_calc_freespace(struct udf_mount *ump, uint64_t *sizeblks, uint64_t *freeblks
 	 * We sum all free space up here regardless of type.
 	 */
 
-/*	KASSERT(lvid); */
+	/* KASSERT(lvid); */
 	num_vpart = le32toh(lvid->num_part);
 
 #if 0
@@ -435,7 +432,6 @@ udf_calc_vpart_freespace(struct udf_mount *ump, uint16_t vpart_num, uint64_t *fr
 	}
 }
 #endif
-/* --------------------------------------------------------------------- */
 
 int
 udf_translate_vtop(struct udf_mount *ump, struct long_ad *icb_loc,
@@ -582,7 +578,6 @@ printf("Metadata Partition Translated\n");
 	return (EINVAL);
 }
 
-
 /* XXX  provisional primitive braindead version */
 /* TODO use ext_res */
 #if 0
@@ -605,7 +600,6 @@ udf_translate_vtop_list(struct udf_mount *ump, uint32_t sectors,
 }
 #endif
 
-/* --------------------------------------------------------------------- */
 /* 
  * This is a simplified version of the udf_translate_file_extent function. 
  */
@@ -717,7 +711,6 @@ udf_bmap_translate(struct udf_node *udf_node, uint32_t block,
 
 	return (0);
 }
-/* --------------------------------------------------------------------- */
 
 /*
  * Translate an extent (in logical_blocks) into logical block numbers; used
@@ -892,7 +885,6 @@ udf_translate_file_extent(struct udf_node *udf_node,
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
 
 static int
 udf_search_free_vatloc(struct udf_mount *ump, uint32_t *lbnumres)
@@ -1096,7 +1088,6 @@ udf_bitmap_check_trunc_free(struct udf_bitmap *bitmap, uint32_t to_trunc)
 	return (seq_free);
 }
 
-/* --------------------------------------------------------------------- */
 
 /*
  * We check for overall disc space with a margin to prevent critical
@@ -1223,7 +1214,6 @@ udf_cleanup_reservation(struct udf_node *udf_node)
 	mutex_exit(&ump->allocate_mutex);
 }
 
-/* --------------------------------------------------------------------- */
 
 /*
  * Allocate an extent of given length on given virt. partition. It doesn't
@@ -1379,7 +1369,6 @@ udf_allocate_space(struct udf_mount *ump, struct udf_node *udf_node,
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
 
 void
 udf_free_allocated_space(struct udf_mount *ump, uint32_t lb_num,
@@ -1469,7 +1458,6 @@ udf_free_allocated_space(struct udf_mount *ump, uint32_t lb_num,
 	mutex_exit(&ump->allocate_mutex);
 }
 
-/* --------------------------------------------------------------------- */
 
 /*
  * Special function to synchronise the metadatamirror file when they change on
@@ -1523,7 +1511,6 @@ void udf_synchronise_metadatamirror_node(struct udf_mount *ump)
 	udf_count_alloc_exts(metamirror_node);
 }
 
-/* --------------------------------------------------------------------- */
 
 /*
  * When faced with an out of space but there is still space available on other
@@ -1690,7 +1677,6 @@ udf_collect_free_space_for_vpart(struct udf_mount *ump,
 	/* allocate mutex should still be helt */
 }
 
-/* --------------------------------------------------------------------- */
 
 /*
  * Allocate a buf on disc for direct write out. The space doesn't have to be
@@ -1758,7 +1744,6 @@ udf_late_allocate_buf(struct udf_mount *ump, struct buf *buf,
 	}
 }
 
-/* --------------------------------------------------------------------- */
 
 /*
  * Try to merge a1 with the new piece a2. udf_ads_merge returns error when not
@@ -1817,7 +1802,6 @@ udf_ads_merge(uint32_t lb_size, struct long_ad *a1, struct long_ad *a2)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
 
 static void
 udf_wipe_adslots(struct udf_node *udf_node)
@@ -1879,7 +1863,6 @@ udf_wipe_adslots(struct udf_node *udf_node)
 	udf_node->i_flags |= IN_NODE_REBUILD;
 }
 #endif
-/* --------------------------------------------------------------------- */
 
 void
 udf_get_adslot(struct udf_node *udf_node, int slot, struct long_ad *icb,
@@ -1983,7 +1966,6 @@ udf_get_adslot(struct udf_node *udf_node, int slot, struct long_ad *icb,
 	}
 }
 
-/* --------------------------------------------------------------------- */
 #if 0
 int
 udf_append_adslot(struct udf_node *udf_node, int *slot, struct long_ad *icb) {
@@ -2231,7 +2213,6 @@ udf_append_adslot(struct udf_node *udf_node, int *slot, struct long_ad *icb) {
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
 
 static void
 udf_count_alloc_exts(struct udf_node *udf_node)
@@ -2289,8 +2270,6 @@ udf_count_alloc_exts(struct udf_node *udf_node)
 	udf_node->num_extensions = num_extents;
 }
 
-
-/* --------------------------------------------------------------------- */
 
 /*
  * Adjust the node's allocation descriptors to reflect the new mapping; do
@@ -2661,7 +2640,6 @@ out:
 	return;
 }
 
-/* --------------------------------------------------------------------- */
 
 int
 udf_grow_node(struct udf_node *udf_node, uint64_t new_size)
@@ -2932,7 +2910,6 @@ errorout:
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
 
 int
 udf_shrink_node(struct udf_node *udf_node, uint64_t new_size)

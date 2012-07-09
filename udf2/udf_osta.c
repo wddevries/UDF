@@ -75,7 +75,6 @@ uint16_t udf_ea_cksum(uint8_t *data) {
         return (checksum);
 }
 
-
 #ifdef MAIN
 unsigned char bytes[] = { 0x70, 0x6A, 0x77 };
 
