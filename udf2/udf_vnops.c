@@ -42,11 +42,11 @@
 #include <sys/unistd.h>
 #include <sys/bio.h>
 
+//#include <fs/fifofs/fifo.h>
+
 #include "ecma167-udf.h"
 #include "udf.h"
 #include "udf_subr.h"
-
-//#include <fs/fifofs/fifo.h>
 
 static vop_access_t	udf_access;
 static vop_bmap_t       udf_bmap;
@@ -95,14 +95,13 @@ struct vop_vector udf_fifoops = {
 };
 
 /* implementations of vnode functions; table follows at end */
-/* --------------------------------------------------------------------- */
+
 
 int
 udf_getanode(struct mount *mp, struct vnode **vpp)
 {
 	return (getnewvnode("udf2", mp, &udf_vnodeops, vpp));
 }
-
 
 #if 0 
 int
@@ -161,8 +160,6 @@ udf_inactive(void *v)
 	return (0);
 }
 #endif
-/* --------------------------------------------------------------------- */
-
 
 static int
 udf_reclaim(struct vop_reclaim_args *ap)
@@ -195,16 +192,15 @@ udf_reclaim(struct vop_reclaim_args *ap)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
 static int
 udf_read(struct vop_read_args *ap)
 {
-	struct vnode *vp     = ap->a_vp;
-	struct uio *uio    = ap->a_uio;
+	struct vnode *vp = ap->a_vp;
+	struct uio *uio = ap->a_uio;
 	struct buf *bp;
 	struct udf_node *udf_node = VTOI(vp);
 	uint64_t file_size;
-	int on, n, lbn; 
+	int lbn, n, on; 
 	int error = 0;
 
 	/* can this happen? some filingsystems have this check */
@@ -220,7 +216,7 @@ udf_read(struct vop_read_args *ap)
 #endif
 
 	/* get file/directory filesize */
-	if (udf_node->fe)
+	if (udf_node->fe != NULL)
 		file_size = le64toh(udf_node->fe->inf_len);
 	else 
 		file_size = le64toh(udf_node->efe->inf_len);
@@ -239,7 +235,7 @@ udf_read(struct vop_read_args *ap)
 		n = min(n, file_size - uio->uio_offset);
 		error = bread(vp, lbn, udf_node->ump->sector_size, NOCRED, &bp);
 		n = min(n, udf_node->ump->sector_size - bp->b_resid);
-		if (!error) 
+		if (error == 0) 
 			error = uiomove(bp->b_data + on, n, uio);
 
 		brelse(bp);
@@ -256,7 +252,7 @@ udf_read(struct vop_read_args *ap)
 
 	return (error);
 }
-/* --------------------------------------------------------------------- */
+
 #if 0
 int
 udf_write(void *v)
@@ -406,7 +402,6 @@ udf_write(void *v)
 }
 #endif
 
-/* --------------------------------------------------------------------- */
 static int
 udf_bmap(struct vop_bmap_args /* {
 		struct vop_generic_args a_gen;
@@ -418,10 +413,10 @@ udf_bmap(struct vop_bmap_args /* {
 		int *a_runb;
 	 } */ *ap)
 {
-	struct vnode  *vp  = ap->a_vp;	/* our node	*/
+	struct vnode *vp = ap->a_vp;
 	struct udf_node *udf_node = VTOI(vp);
 	uint64_t lsector;
-	int exttype, error;
+	int error, exttype;
 	uint32_t maxblks;
 
 	if (ap->a_bop != NULL)
@@ -433,7 +428,7 @@ udf_bmap(struct vop_bmap_args /* {
 	/* get logical block and run */
 	error = udf_bmap_translate(udf_node, ap->a_bn, &exttype, &lsector,
 	    &maxblks);
-	if (error)
+	if (error != 0)
 		return (error);
 
 	/* convert to dev blocks */
@@ -445,10 +440,10 @@ udf_bmap(struct vop_bmap_args /* {
 		*ap->a_bnp = lsector * (udf_node->ump->sector_size/DEV_BSIZE);
 
 	/* set runlength of maximum block size */
-	if (ap->a_runp)
+	if (ap->a_runp != NULL)
 		*ap->a_runp = 0;
 
-	if (ap->a_runb) 
+	if (ap->a_runb != NULL) 
 		*ap->a_runb = 0;
 
 	/* return success */
@@ -459,13 +454,12 @@ static int
 udf_strategy(struct vop_strategy_args *ap)
 {
 	struct vnode *vp = ap->a_vp;
-	struct buf   *bp = ap->a_bp;
+	struct buf *bp = ap->a_bp;
 	struct udf_node *udf_node = VTOI(vp);
 	struct bufobj *bo = udf_node->ump->bo;
 	uint64_t lsector;
-	int exttype, error;
-	uint32_t lb_size, from, sectors;
-	uint32_t maxblks;
+	int error, exttype;
+	uint32_t from, lb_size, sectors, maxblks;
 
 	if (vp->v_type == VBLK || vp->v_type == VCHR)
 		panic("udf_strategy: spec");
@@ -478,8 +472,8 @@ udf_strategy(struct vop_strategy_args *ap)
 	/* get logical block and run */
 	error = udf_bmap_translate(udf_node, bp->b_lblkno, &exttype, &lsector,
 	    &maxblks);
-	if (error) {
-		bp->b_error  = error;
+	if (error != 0) {
+		bp->b_error = error;
 		bufdone(bp);
 		return (error);
 	}
@@ -490,26 +484,25 @@ udf_strategy(struct vop_strategy_args *ap)
 			if ((bp->b_flags & B_ASYNC) == 0)
 				bufwait(bp);
 		} else if (exttype == UDF_TRAN_INTERN) {
-			error = udf_read_internal(udf_node, (uint8_t *) bp->b_data);
-			if (error)
+			error = udf_read_internal(udf_node,
+			    (uint8_t *)bp->b_data);
+			if (error != 0)
 				bp->b_error  = error;
 			bufdone(bp);
 			if ((bp->b_flags & B_ASYNC) == 0)
 				bufwait(bp);
 		} else {
-			bp->b_blkno = lsector * (udf_node->ump->sector_size/DEV_BSIZE);
+			bp->b_blkno = lsector * 
+			    (udf_node->ump->sector_size / DEV_BSIZE);
 			bp->b_iooffset = dbtob(bp->b_blkno);
 			BO_STRATEGY(bo, bp);
 		}
-	} else {
+	} else
 		return (ENOTSUP);
-	}
 
 	return (bp->b_error);
 }
 
-
-/* --------------------------------------------------------------------- */
 /* TODO: Needs lots of work */
 static int
 udf_readdir(struct vop_readdir_args /* {
@@ -529,10 +522,8 @@ udf_readdir(struct vop_readdir_args /* {
 	struct dirent *dirent;
 	struct udf_mount *ump;
 	struct udf_node *udf_node;
-	uint64_t *cookiesp, *cookies, cookie;
-	uint64_t file_size, diroffset, transoffset;
-	int ncookies, acookies;
-	int error;
+	uint64_t cookie, *cookies, *cookiesp, diroffset, file_size, transoffset;
+	int acookies, error, ncookies;
 	uint32_t lb_size;
 	uint8_t *fid_name;
 	
@@ -546,7 +537,7 @@ udf_readdir(struct vop_readdir_args /* {
 		return (ENOTDIR);
 
 	/* get directory filesize */
-	if (udf_node->fe) {
+	if (udf_node->fe != NULL) {
 		fe = udf_node->fe;
 		file_size = le64toh(fe->inf_len);
 	} else {
@@ -582,12 +573,12 @@ udf_readdir(struct vop_readdir_args /* {
 		dirent->d_name[1] = '\0';
 		dirent->d_namlen = 1;
 		dirent->d_reclen = GENERIC_DIRSIZ(dirent);
-		if (cookiesp) {
+		if (cookiesp != NULL) {
 			acookies++;
 			*cookiesp++ = 1;
 		}
 		error = uiomove(dirent, GENERIC_DIRSIZ(dirent), uio);
-		if (error)
+		if (error != 0)
 			goto bail;
 
 		/* mark with magic value that we have done the dummy */
@@ -604,12 +595,12 @@ udf_readdir(struct vop_readdir_args /* {
 		if (uio->uio_offset == UDF_DIRCOOKIE_DOT)
 			uio->uio_offset = 0;
 
-		diroffset   = uio->uio_offset;
+		diroffset = uio->uio_offset;
 		transoffset = diroffset;
 		while (diroffset < file_size) {
 			/* transfer a new fid/dirent */
 			error = udf_read_fid_stream(vp, &diroffset, fid);
-			if (error) {
+			if (error != 0) {
 				printf("Read error in read fid: %d\n", error);
 				break;
 			}
@@ -618,9 +609,9 @@ udf_readdir(struct vop_readdir_args /* {
 			 * create resulting dirent structure 
 			 */
 			memset(dirent, 0, sizeof(struct dirent));
-			dirent->d_fileno = udf_get_node_id(&fid->icb);	/* inode hash XXX */
+			dirent->d_fileno = udf_get_node_id(&fid->icb); /* inode hash XXX */
 
-			/* Not worth trying to go for the filetypes now, too expensive */
+			/* Going for the filetypes now too expensive. */
 			dirent->d_type = DT_UNKNOWN;
 			if (fid->file_char & UDF_FILE_CHAR_DIR)
 				dirent->d_type = DT_DIR;
@@ -661,7 +652,7 @@ udf_readdir(struct vop_readdir_args /* {
 				continue;
 
 			/* copy dirent to the caller */
-			if (cookiesp) {
+			if (cookiesp != NULL) {
 				/*
 				if (++acookies >= ncookies)
 					break; 
@@ -670,7 +661,7 @@ udf_readdir(struct vop_readdir_args /* {
 				*cookiesp++ = cookie;
 			}
 			error = uiomove(dirent, GENERIC_DIRSIZ(dirent), uio);
-			if (error)
+			if (error != 0)
 				break;
 		}
 
@@ -684,9 +675,9 @@ bail:
 	*ap->a_eofflag = (uio->uio_offset >= file_size);
 
 	if (ap->a_ncookies != NULL) {
-		if (error) {
+		if (error != 0)
 			free(cookies, M_UDFTEMP);
-		} else {
+		else {
 			*ap->a_ncookies = acookies;
 			*ap->a_cookies = cookies;
 		}
@@ -695,8 +686,6 @@ bail:
 
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 static int
 udf_cachedlookup(struct vop_cachedlookup_args *ap)
@@ -710,20 +699,19 @@ udf_cachedlookup(struct vop_cachedlookup_args *ap)
 	struct udf_mount *ump;
 	uint64_t file_size, offset;
 	ino_t id = 0;
-	int nameiop, islastcn, mounted_ro, numpasses;
-	int unix_len, ltype;
-	int error = 0;
+	int error, islastcn, ltype, mounted_ro, nameiop, numpasses, unix_len;
 	uint8_t *fid_name;
 	char *unix_name;
 
 	dir_node = VTOI(dvp);
 	ump = dir_node->ump;
 	*vpp = NULL;
+	error = 0;
 
 	/* simplify/clarification flags */
-	nameiop     = cnp->cn_nameiop;
-	islastcn    = cnp->cn_flags & ISLASTCN;
-	mounted_ro  = dvp->v_mount->mnt_flag & MNT_RDONLY;
+	nameiop = cnp->cn_nameiop;
+	islastcn = cnp->cn_flags & ISLASTCN;
+	mounted_ro = dvp->v_mount->mnt_flag & MNT_RDONLY;
 
 	/*
 	 * If requesting a modify on the last path element on a read-only
@@ -733,7 +721,7 @@ udf_cachedlookup(struct vop_cachedlookup_args *ap)
 		return (EROFS);
 
 	/* get directory filesize */
-	if (dir_node->fe)
+	if (dir_node->fe != NULL)
 		file_size = le64toh(dir_node->fe->inf_len);
 	else
 		file_size = le64toh(dir_node->efe->inf_len);
@@ -741,7 +729,8 @@ udf_cachedlookup(struct vop_cachedlookup_args *ap)
 	/* 
 	 * 
 	 */
-	if (nameiop != LOOKUP || dir_node->diroff == 0 || dir_node->diroff > file_size) {
+	if (nameiop != LOOKUP || dir_node->diroff == 0 || 
+	    dir_node->diroff > file_size) {
 		offset = 0;
 		numpasses = 1;
 	}
@@ -756,7 +745,7 @@ udf_cachedlookup(struct vop_cachedlookup_args *ap)
 lookuploop:
 	while (offset < file_size) {
 		error = udf_read_fid_stream(dvp, &offset, fid);
-		if (error) {
+		if (error != 0) {
 			break;
 		}
 
@@ -781,7 +770,8 @@ lookuploop:
 			unix_len = strlen(unix_name);
 
 			if (unix_len == cnp->cn_namelen) {
-				if (!strncmp(unix_name, cnp->cn_nameptr, cnp->cn_namelen)) {
+				if (!strncmp(unix_name, cnp->cn_nameptr, 
+				    cnp->cn_namelen)) {
 					id = udf_get_node_id(&fid->icb);
 					break;
 				}
@@ -789,18 +779,17 @@ lookuploop:
 		}
 	}
 
-	if (error)
+	if (error != 0)
 		goto exit; 
 
-	if (id) {
+	if (id != 0) {
 		if ((cnp->cn_flags & ISLASTCN) && cnp->cn_nameiop == LOOKUP)
 			dir_node->diroff = offset;
 		if (numpasses == 2)
 			nchstats.ncs_pass2++;
 
-		if (cnp->cn_flags & ISDOTDOT) {
+		if (cnp->cn_flags & ISDOTDOT)
 			vn_vget_ino(dvp, id, cnp->cn_lkflags, &tdp);
-		}
 		else if (dir_node->hash_id == id) {
 			/* through a glass darkly... */
 			VREF(dvp);
@@ -812,12 +801,11 @@ lookuploop:
 					vn_lock(dvp, LK_DOWNGRADE | LK_RETRY);
 			}
 			tdp = dvp;
-		}
-		else {
-			error = udf_vget(ump->vfs_mountp, id, cnp->cn_lkflags, &tdp);
-		}
+		} else
+			error = udf_vget(ump->vfs_mountp, id, cnp->cn_lkflags,
+			    &tdp);
 
-		if (!error) {
+		if (error == 0) {
 			*vpp = tdp;
 			if (cnp->cn_flags & MAKEENTRY) 
 				cache_enter(dvp, *vpp, cnp);
@@ -856,7 +844,6 @@ exit:
 #endif
 }
 
-/* --------------------------------------------------------------------- */
 /* This is finished */
 static int
 udf_getattr(struct vop_getattr_args *ap)
@@ -868,14 +855,13 @@ udf_getattr(struct vop_getattr_args *ap)
 	struct filetimes_extattr_entry *ft_extattr;
 	struct device_extattr_entry *devattr;
 	struct vattr *vap = ap->a_vap;
-	struct timestamp *atime, *mtime, *attrtime, *creatime;
+	struct timestamp *atime, *attrtime, *creatime, *mtime;
 	struct udf_mount *ump = udf_node->ump;
-	uint64_t filesize, blkssize;
+	uint64_t blkssize, filesize;
 	gid_t gid;
 	int error;
 	uid_t uid;
-	uint32_t nlink;
-	uint32_t offset, a_l;
+	uint32_t a_l, nlink, offset;
 	uint8_t *filedata;
 
 	/* update times before we returning values */ 
@@ -884,14 +870,14 @@ udf_getattr(struct vop_getattr_args *ap)
 #endif
 
 	/* get descriptor information */
-	if (fe) {
-		nlink    = le16toh(fe->link_cnt);
-		uid      = (uid_t)le32toh(fe->uid);
-		gid      = (gid_t)le32toh(fe->gid);
+	if (fe != NULL) {
+		nlink = le16toh(fe->link_cnt);
+		uid = (uid_t)le32toh(fe->uid);
+		gid = (gid_t)le32toh(fe->gid);
 		filesize = le64toh(fe->inf_len);
 		blkssize = le64toh(fe->logblks_rec);
-		atime    = &fe->atime;
-		mtime    = &fe->mtime;
+		atime = &fe->atime;
+		mtime = &fe->mtime;
 		attrtime = &fe->attrtime;
 		filedata = fe->data;
 
@@ -900,30 +886,30 @@ udf_getattr(struct vop_getattr_args *ap)
 
 		/* check our extended attribute if present */
 		error = udf_extattr_search_intern(udf_node,
-			UDF_FILETIMES_ATTR_NO, "", &offset, &a_l);
-		if (!error) {
+		    UDF_FILETIMES_ATTR_NO, "", &offset, &a_l);
+		if (error == 0) {
 			ft_extattr = (struct filetimes_extattr_entry *)
 				(filedata + offset);
 			if (ft_extattr->existence & UDF_FILETIMES_FILE_CREATION)
 				creatime = &ft_extattr->times[0];
 		}
 	} else {
-		nlink    = le16toh(efe->link_cnt);
-		uid      = (uid_t)le32toh(efe->uid);
-		gid      = (gid_t)le32toh(efe->gid);
+		nlink = le16toh(efe->link_cnt);
+		uid = (uid_t)le32toh(efe->uid);
+		gid = (gid_t)le32toh(efe->gid);
 		filesize = le64toh(efe->inf_len);	/* XXX or obj_size? */
 		blkssize = le64toh(efe->logblks_rec);
-		atime    = &efe->atime;
-		mtime    = &efe->mtime;
+		atime = &efe->atime;
+		mtime = &efe->mtime;
 		attrtime = &efe->attrtime;
 		creatime = &efe->ctime;
 		filedata = efe->data;
 	}
 
 	/* do the uid/gid translation game */
-	if (uid == (uid_t) -1)
+	if (uid == (uid_t) - 1)
 		uid = ump->anon_uid;
-	if (gid == (gid_t) -1)
+	if (gid == (gid_t) - 1)
 		gid = ump->anon_gid;
 
 	/*
@@ -943,44 +929,40 @@ udf_getattr(struct vop_getattr_args *ap)
 
 	/* fill in struct vattr with values from the node */
 	vattr_null(vap);
-	vap->va_type      = vp->v_type;
-	vap->va_mode      = udf_getaccessmode(udf_node);
-	vap->va_nlink     = nlink;
-	vap->va_uid       = uid;
-	vap->va_gid       = gid;
-	vap->va_fsid      = dev2udev(ump->dev); /* vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0]; */
-	vap->va_fileid    = udf_get_node_id(&udf_node->loc);   /* inode hash XXX */
-	vap->va_size      = filesize;
-	vap->va_blocksize = ump->sector_size;  /* wise? */
+	vap->va_type = vp->v_type;
+	vap->va_mode = udf_getaccessmode(udf_node);
+	vap->va_nlink = nlink;
+	vap->va_uid = uid;
+	vap->va_gid = gid;
+	vap->va_fsid = dev2udev(ump->dev); /* vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0]; */
+	vap->va_fileid = udf_get_node_id(&udf_node->loc); /* inode hash XXX */
+	vap->va_size = filesize;
+	vap->va_blocksize = ump->sector_size; /* wise? */
 
 	/* access times */
-	udf_timestamp_to_timespec(ump, atime,    &vap->va_atime);
-	udf_timestamp_to_timespec(ump, mtime,    &vap->va_mtime);
+	udf_timestamp_to_timespec(ump, atime, &vap->va_atime);
+	udf_timestamp_to_timespec(ump, mtime, &vap->va_mtime);
 	udf_timestamp_to_timespec(ump, attrtime, &vap->va_ctime);
 	udf_timestamp_to_timespec(ump, creatime, &vap->va_birthtime);
 
-	vap->va_gen       = 1;		/* no multiple generations yes (!?) */
-	vap->va_flags     = 0;		/* no flags */
-	vap->va_bytes     = blkssize * ump->sector_size;
-	vap->va_filerev   = 0;		/* TODO file revision numbers? 
-					  This was changed from a 1. */
-	vap->va_vaflags   = 0;
+	vap->va_gen = 1; /* no multiple generations yes (!?) */
+	vap->va_flags = 0;
+	vap->va_bytes = blkssize * ump->sector_size;
+	vap->va_filerev = 0; /* TODO file revision numbers? */
+	vap->va_vaflags = 0;
 	/* TODO get vaflags from the extended attributes? */
 
-	if ((vap->va_type == VBLK) || (vap->va_type == VCHR)) {
+	if (vap->va_type == VBLK || vap->va_type == VCHR) {
 		error = udf_extattr_search_intern(udf_node,
-				UDF_DEVICESPEC_ATTR_NO, "",
-				&offset, &a_l);
+		    UDF_DEVICESPEC_ATTR_NO, "",	&offset, &a_l);
 		/* if error, deny access */
-		if (error || (filedata == NULL)) {
+		if (error != 0 || filedata == NULL)
 			vap->va_mode = 0;	/* or v_type = VNON?  */
-		} else {
-			devattr = (struct device_extattr_entry *)
-				filedata + offset;
-			vap->va_rdev = makedev(
-				le32toh(devattr->major),
-				le32toh(devattr->minor)
-				);
+		else {
+			devattr = (struct device_extattr_entry *)filedata +
+			    offset;
+			vap->va_rdev = makedev(le32toh(devattr->major),
+			    le32toh(devattr->minor));
 			/* TODO we could check the implementator */
 		}
 	}
@@ -988,7 +970,6 @@ udf_getattr(struct vop_getattr_args *ap)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
 #if 0
 static int
 udf_chown(struct vnode *vp, uid_t new_uid, gid_t new_gid,
@@ -1038,7 +1019,6 @@ udf_chown(struct vnode *vp, uid_t new_uid, gid_t new_gid,
 	return (0);
 }
 
-
 static int
 udf_chmod(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 {
@@ -1073,7 +1053,6 @@ udf_chmod(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 
 	return (0);
 }
-
 
 /* exported */
 int
@@ -1127,7 +1106,6 @@ udf_chsize(struct vnode *vp, u_quad_t newsize, kauth_cred_t cred)
 	return (error);
 }
 
-
 static int
 udf_chflags(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 {
@@ -1138,7 +1116,6 @@ udf_chflags(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 
 	return (0);
 }
-
 
 static int
 udf_chtimes(struct vnode *vp,
@@ -1209,12 +1186,12 @@ udf_setattr(struct vop_setattr_args *ap)
 	    vap->va_bytes != VNOVAL)
 		error = EINVAL;
 
-	if (error == 0 && (vap->va_flags != VNOVAL)) {
+	if (error == 0 && vap->va_flags != VNOVAL) {
 		return (EROFS);
 /*		error = udf_chflags(vp, vap->va_flags, cred); */
 	}
 
-	if (error == 0 && (vap->va_size != VNOVAL)) {
+	if (error == 0 && vap->va_size != VNOVAL) {
 		if (vap->va_type == VDIR)
 			return (EISDIR);
 		if (vap->va_type == VLNK || vap->va_type == VREG)
@@ -1247,8 +1224,6 @@ udf_setattr(struct vop_setattr_args *ap)
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
-
 /*
  * Return POSIX pathconf information for UDF file systems.
  */
@@ -1259,7 +1234,7 @@ udf_pathconf(struct vop_pathconf_args *ap)
 
 	switch (ap->a_name) {
 	case _PC_LINK_MAX:
-		*ap->a_retval = (1<<16)-1;	/* 16 bits */
+		*ap->a_retval = (1 << 16) - 1; /* 16 bits */
 		return (0);
 	case _PC_NAME_MAX:
 		*ap->a_retval = NAME_MAX;
@@ -1293,9 +1268,6 @@ udf_pathconf(struct vop_pathconf_args *ap)
 	return (EINVAL);
 }
 
-
-/* --------------------------------------------------------------------- */
-
 static int
 udf_open(struct vop_open_args *ap)
 {
@@ -1312,7 +1284,7 @@ udf_open(struct vop_open_args *ap)
 	/* if ((flags & APPEND) && (ap->a_mode & (FWRITE | O_APPEND)) == FWRITE)
 		return (EPERM); */
 
-	if (udf_node->fe)
+	if (udf_node->fe != NULL)
 		file_size = le64toh(udf_node->fe->inf_len);
 	else
 		file_size = le64toh(udf_node->efe->inf_len);
@@ -1322,8 +1294,6 @@ udf_open(struct vop_open_args *ap)
 	return (0);
 }
 
-
-/* --------------------------------------------------------------------- */
 #if 0
 int
 udf_close(void *v)
@@ -1358,7 +1328,6 @@ udf_close(void *v)
 }
 #endif
 
-/* --------------------------------------------------------------------- */
 static int
 udf_access(struct vop_access_args *ap)
 {
@@ -1409,7 +1378,7 @@ udf_access(struct vop_access_args *ap)
 
 	mode = udf_getaccessmode(udf_node);
 
-	if (udf_node->fe) {
+	if (udf_node->fe != NULL) {
 		uid = udf_node->fe->uid;
 		gid = udf_node->fe->gid;
 	}
@@ -1421,7 +1390,6 @@ udf_access(struct vop_access_args *ap)
 	return (vaccess(vp->v_type, mode, uid, gid, accmode, ap->a_cred, NULL));
 }
 
-/* --------------------------------------------------------------------- */
 #if 0
 int
 udf_create(void *v)
@@ -1447,8 +1415,6 @@ udf_create(void *v)
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
-
 int
 udf_mknod(void *v)
 {
@@ -1473,8 +1439,6 @@ udf_mknod(void *v)
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
-
 int
 udf_mkdir(void *v)
 {
@@ -1498,8 +1462,6 @@ udf_mkdir(void *v)
 	vput(dvp);
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 static int
 udf_do_link(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
@@ -1569,8 +1531,6 @@ udf_link(void *v)
 
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 static int
 udf_do_symlink(struct udf_node *udf_node, char *target)
@@ -1685,7 +1645,6 @@ udf_do_symlink(struct udf_node *udf_node, char *target)
 	return (error);
 }
 
-
 int
 udf_symlink(void *v)
 {
@@ -1723,7 +1682,6 @@ udf_symlink(void *v)
 	return (error);
 }
 #endif
-/* --------------------------------------------------------------------- */
 
 int
 udf_readlink(struct vop_readlink_args *ap)
@@ -1732,33 +1690,30 @@ udf_readlink(struct vop_readlink_args *ap)
 	struct uio *uio = ap->a_uio;
 	struct pathcomp pathcomp;
 	struct udf_node *udf_node;
-	int pathlen, targetlen, namelen, mntonnamelen, len, l_ci, filelen;
-	int first, error;
+	int error, filelen, first, len, l_ci, mntonnamelen, namelen, pathlen;
+	int targetlen;
 	char *mntonname;
-	uint8_t *pathbuf, *targetbuf, *tmpname;
-	uint8_t *pathpos, *targetpos;
+	uint8_t *pathbuf, *pathpos, *targetbuf, *targetpos, *tmpname;
 
 	udf_node = VTOI(vp);
 
-	if (udf_node->efe)
+	if (udf_node->efe != NULL)
 		filelen = le64toh(udf_node->efe->inf_len);
 	else
 		filelen = le64toh(udf_node->fe->inf_len);
 
 	/* claim temporary buffers for translation */
-	pathbuf   = malloc(UDF_SYMLINKBUFLEN, M_UDFTEMP, M_WAITOK);
-	targetbuf = malloc(PATH_MAX+1, M_UDFTEMP, M_WAITOK);
-	tmpname   = malloc(PATH_MAX+1, M_UDFTEMP, M_WAITOK);
+	pathbuf = malloc(UDF_SYMLINKBUFLEN, M_UDFTEMP, M_WAITOK);
+	targetbuf = malloc(PATH_MAX + 1, M_UDFTEMP, M_WAITOK);
+	tmpname = malloc(PATH_MAX + 1, M_UDFTEMP, M_WAITOK);
 	memset(pathbuf, 0, UDF_SYMLINKBUFLEN);
 	memset(targetbuf, 0, PATH_MAX);
 
 
 	/* read contents of file in our temporary buffer */
-	error = vn_rdwr(UIO_READ, vp,
-		pathbuf, filelen, 0,
-		UIO_SYSSPACE, IO_NODELOCKED,
-		FSCRED, NULL, NULL, curthread);
-	if (error) {
+	error = vn_rdwr(UIO_READ, vp, pathbuf, filelen, 0, UIO_SYSSPACE,
+	    IO_NODELOCKED, FSCRED, NULL, NULL, curthread);
+	if (error != 0) {
 		/* failed to read in symlink contents */
 		free(pathbuf, M_UDFTEMP);
 		free(targetbuf, M_UDFTEMP);
@@ -1767,11 +1722,11 @@ udf_readlink(struct vop_readlink_args *ap)
 	}
 
 	/* convert to a unix path */
-	pathpos   = pathbuf;
-	pathlen   = 0;
+	pathpos = pathbuf;
+	pathlen = 0;
 	targetpos = targetbuf;
 	targetlen = PATH_MAX;
-	mntonname    = udf_node->ump->vfs_mountp->mnt_stat.f_mntonname;
+	mntonname = udf_node->ump->vfs_mountp->mnt_stat.f_mntonname;
 	mntonnamelen = strlen(mntonname);
 
 	error = 0;
@@ -1781,47 +1736,55 @@ udf_readlink(struct vop_readlink_args *ap)
 		memcpy(&pathcomp, pathpos, len);
 		l_ci = pathcomp.l_ci;
 		switch (pathcomp.type) {
-		case UDF_PATH_COMP_ROOT :
+		case UDF_PATH_COMP_ROOT:
 			/* XXX should check for l_ci; bugcompatible now */
-			if ((targetlen < 1) || !first) {
+			if (targetlen < 1 || first == 0) {
 				error = EINVAL;
 				break;
 			}
-			*targetpos++ = '/'; targetlen--;
+			*targetpos++ = '/';
+			targetlen--;
 			break;
-		case UDF_PATH_COMP_MOUNTROOT :
+		case UDF_PATH_COMP_MOUNTROOT:
 			/* XXX what should it be if l_ci > 0 ? [4/48.16.1.2] */
-			if (l_ci || (targetlen < mntonnamelen+1) || !first) {
+			if (l_ci || targetlen < mntonnamelen + 1 || !first) {
 				error = EINVAL;
 				break;
 			}
 			memcpy(targetpos, mntonname, mntonnamelen);
-			targetpos += mntonnamelen; targetlen -= mntonnamelen;
-			if (filelen-pathlen > UDF_PATH_COMP_SIZE+l_ci) {
+			targetpos += mntonnamelen;
+			targetlen -= mntonnamelen;
+			if (filelen - pathlen > UDF_PATH_COMP_SIZE + l_ci) {
 				/* more follows, so must be directory */
-				*targetpos++ = '/'; targetlen--;
+				*targetpos++ = '/';
+				targetlen--;
 			}
 			break;
-		case UDF_PATH_COMP_PARENTDIR :
+		case UDF_PATH_COMP_PARENTDIR:
 			/* XXX should check for l_ci; bugcompatible now */
 			if (targetlen < 3) {
 				error = EINVAL;
 				break;
 			}
-			*targetpos++ = '.'; targetlen--;
-			*targetpos++ = '.'; targetlen--;
-			*targetpos++ = '/'; targetlen--;
+			*targetpos++ = '.';
+			targetlen--;
+			*targetpos++ = '.';
+			targetlen--;
+			*targetpos++ = '/';
+			targetlen--;
 			break;
-		case UDF_PATH_COMP_CURDIR :
+		case UDF_PATH_COMP_CURDIR:
 			/* XXX should check for l_ci; bugcompatible now */
 			if (targetlen < 2) {
 				error = EINVAL;
 				break;
 			}
-			*targetpos++ = '.'; targetlen--;
-			*targetpos++ = '/'; targetlen--;
+			*targetpos++ = '.';
+			targetlen--;
+			*targetpos++ = '/';
+			targetlen--;
 			break;
-		case UDF_PATH_COMP_NAME :
+		case UDF_PATH_COMP_NAME:
 			if (l_ci == 0) {
 				error = EINVAL;
 				break;
@@ -1829,25 +1792,27 @@ udf_readlink(struct vop_readlink_args *ap)
 			memset(tmpname, 0, PATH_MAX);
 			memcpy(&pathcomp, pathpos, len + l_ci);
 			udf_to_unix_name(udf_node->ump, tmpname, MAXPATHLEN,
-				pathcomp.ident, l_ci);
+			    pathcomp.ident, l_ci);
 			namelen = strlen(tmpname);
 			if (targetlen < namelen + 1) {
 				error = EINVAL;
 				break;
 			}
 			memcpy(targetpos, tmpname, namelen);
-			targetpos += namelen; targetlen -= namelen;
-			if (filelen-pathlen > UDF_PATH_COMP_SIZE+l_ci) {
+			targetpos += namelen;
+			targetlen -= namelen;
+			if (filelen-pathlen > UDF_PATH_COMP_SIZE + l_ci) {
 				/* more follows, so must be directory */
-				*targetpos++ = '/'; targetlen--;
+				*targetpos++ = '/';
+				targetlen--;
 			}
 			break;
-		default :
+		default:
 			error = EINVAL;
 			break;
 		}
 		first = 0;
-		if (error)
+		if (error != 0)
 			break;
 		pathpos += UDF_PATH_COMP_SIZE + l_ci;
 		pathlen += UDF_PATH_COMP_SIZE + l_ci;
@@ -1858,7 +1823,7 @@ udf_readlink(struct vop_readlink_args *ap)
 		error = EINVAL;
 
 	/* uiomove() to destination */
-	if (!error)
+	if (error == 0)
 		uiomove(targetbuf, PATH_MAX - targetlen, uio);
 
 	free(pathbuf, M_UDFTEMP);
@@ -1867,8 +1832,6 @@ udf_readlink(struct vop_readlink_args *ap)
 
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 /*
  * Check if source directory is in the path of the target directory.  Target
@@ -2120,8 +2083,6 @@ out_unlocked:
 	return (error);
 }
 
-/* --------------------------------------------------------------------- */
-
 int
 udf_remove(void *v)
 {
@@ -2160,8 +2121,6 @@ udf_remove(void *v)
 
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 int
 udf_rmdir(void *v)
@@ -2217,8 +2176,6 @@ udf_rmdir(void *v)
 
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 int
 udf_fsync(void *v)
@@ -2308,8 +2265,6 @@ udf_fsync(void *v)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
-
 int
 udf_advlock(void *v)
 {
@@ -2359,6 +2314,7 @@ udf_print(struct vop_print_args *ap)
 	if (vp->v_type == VFIFO)
 		fifo_printinfo(vp);
 	printf("\n");
+
 	return (0);
 }
 

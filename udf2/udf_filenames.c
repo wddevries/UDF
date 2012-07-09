@@ -87,10 +87,10 @@ udf_convert_str(struct udf_mount *ump, char *result, int *result_len,
     uint8_t *id, int id_len, uint16_t *index, int *needsCRC, int *extloc, 
     int eightbit) 
 {
-	size_t rrem, chrem;
-	int i, endi, invalid;
+	size_t chrem, rrem;
+	int endi, i, invalid;
 	uint32_t uch;
-	char *rp, ch[2];
+	char ch[2], *rp;
 	const char *chp;
 
 	if (eightbit)
@@ -128,7 +128,8 @@ udf_convert_str(struct udf_mount *ump, char *result, int *result_len,
 			chp = ch;
 			ch[0] = uch >> 8;
 			ch[1] = uch & 0x00FF;
-			udf2_iconv->convchr(ump->iconv_d2l, &chp, &chrem, &rp, &rrem);
+			udf2_iconv->convchr(ump->iconv_d2l, &chp, &chrem, &rp,
+			    &rrem);
 			if (chrem > 0) {
 				/* not printable or doesn't fit */
 				invalid++;
@@ -149,11 +150,10 @@ udf_convert_str(struct udf_mount *ump, char *result, int *result_len,
 		if (uch == 0x002E && i != 1) {
 			/* record locations of periods where they occur within
 			5 char of the end, but not at the end or start */
-			if (eightbit && id_len - 6 < i && i + 1 != endi) {
+			if (eightbit && id_len - 6 < i && i + 1 != endi)
 				*extloc = i;
-			} else if (!eightbit && id_len - 12 < i && i + 2 != endi) {
+			else if (!eightbit && id_len - 12 < i && i + 2 != endi)
 				*extloc = i;
-			}
 		}
 
 		if (rrem > 0 && invalid == 1) {
@@ -165,11 +165,11 @@ udf_convert_str(struct udf_mount *ump, char *result, int *result_len,
 				chp = ch;
 				ch[0] = uch >> 8;
 				ch[1] = uch & 0x00FF;
-				udf2_iconv->convchr(ump->iconv_d2l, &chp, &chrem, &rp, &rrem); 
-			} else {
-				/* utf8 output */
+				udf2_iconv->convchr(ump->iconv_d2l, &chp,
+				    &chrem, &rp, &rrem); 
+			} else
 				udf_to_utf8(&rp, &rrem, uch);
-			}
+
 			invalid++;
 		}
 
@@ -196,11 +196,13 @@ udf_convert_str(struct udf_mount *ump, char *result, int *result_len,
  * id_len - 1 is character, not \0.
  */
 void
-udf_to_unix_name(struct udf_mount *ump, char *result, int result_len, uint8_t *id, int id_len)
+udf_to_unix_name(struct udf_mount *ump, char *result, int result_len, 
+    uint8_t *id, int id_len)
 {
-	int extloc, junkloc, eightbit, needsCRC, mainlen, crclen, extlen, maxmainlen, maxnpart, i;
+	int crclen, eightbit, extlen, extloc, i, junkloc, mainlen, maxmainlen;
+	int maxnpart, needsCRC;
 	uint16_t crcsum, *index;
-	char *crc, *ext, crcbuf[6];
+	char *crc, crcbuf[6], *ext;
 
 	if (id[0] != 8 && id[0] != 16) {
 		/* this is either invalid or an empty string */
@@ -272,5 +274,4 @@ udf_to_unix_name(struct udf_mount *ump, char *result, int result_len, uint8_t *i
 	}
 
 	free(index, M_UDFTEMP);
-	return;
 }

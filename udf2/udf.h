@@ -80,7 +80,7 @@
 
 
 /* constants */
-#define UDF_MAX_NAMELEN		255			/* as per SPEC */
+#define UDF_MAX_NAMELEN		255	/* as per SPEC */
 #define UDF_TRAN_EXTERNAL	0
 #define UDF_TRAN_INTERN		1
 #define UDF_TRAN_ZERO		2
@@ -150,7 +150,7 @@ MALLOC_DECLARE(M_UDFTEMP);
 
 //struct pool udf_node_pool;
 struct udf_node;
-struct udf_strategy;
+//struct udf_strategy;
 
 
 struct udf_lvintq {
@@ -170,7 +170,7 @@ struct udf_bitmap {
 	uint32_t		 metadata_pos;		/* .. in metadata    */
 };
 
-
+#if 0
 struct udf_strat_args {
 	struct udf_mount *ump;
 	struct udf_node  *udf_node;
@@ -190,12 +190,13 @@ struct udf_strategy {
 	void (*discstrat_init)      (struct udf_strat_args *args);
 	void (*discstrat_finish)    (struct udf_strat_args *args);
 };
+#endif
 
 //extern struct udf_strategy udf_strat_bootstrap;
 //extern struct udf_strategy udf_strat_sequential;
 //extern struct udf_strategy udf_strat_direct;
 //extern struct udf_strategy udf_strat_rmw;
-extern struct udf_strategy udf_strat_readonly;
+//extern struct udf_strategy udf_strat_readonly;
 
 
 /* pre cleanup */
@@ -242,8 +243,8 @@ struct udf_mount {
 
 	/* tracing logvol integrity history */
 	struct udf_lvintq	 lvint_trace[UDF_LVDINT_SEGMENTS];
-	int			 lvopen;		/* logvol actions    */
-	int			 lvclose;		/* logvol actions    */
+//	int			 lvopen;		/* logvol actions    */
+//	int			 lvclose;		/* logvol actions    */
 
 	/* logical to physical translations */
 	int 			 vtop[UDF_PMAPS+1];	/* vpartnr trans     */
@@ -270,26 +271,26 @@ struct udf_mount {
 	uint32_t		 vat_table_len;
 	uint32_t		 vat_table_alloc_len;
 	uint8_t			*vat_table;
-	uint8_t			*vat_pages;		/* TODO */
+//	uint8_t			*vat_pages;		/* TODO */
 	struct udf_node		*vat_node;		/* system node       */
 
 	/* space bitmaps for physical partitions */
-	struct space_bitmap_desc*part_unalloc_dscr[UDF_PARTITIONS];
-	struct space_bitmap_desc*part_freed_dscr  [UDF_PARTITIONS];
-	struct udf_bitmap	 part_unalloc_bits[UDF_PARTITIONS];
-	struct udf_bitmap	 part_freed_bits  [UDF_PARTITIONS];
+	struct space_bitmap_desc *part_unalloc_dscr[UDF_PARTITIONS];
+	struct space_bitmap_desc *part_freed_dscr  [UDF_PARTITIONS];
+//	struct udf_bitmap	 part_unalloc_bits[UDF_PARTITIONS];
+//	struct udf_bitmap	 part_freed_bits  [UDF_PARTITIONS];
 
 	/* sparable */
 	uint32_t		 sparable_packet_size;
 	uint32_t		 packet_size;
-	struct udf_sparing_table*sparing_table;
+	struct udf_sparing_table *sparing_table;
 
 	/* meta */
 	struct udf_node 	*metadata_node;		/* system node       */
 	struct udf_node 	*metadatamirror_node;	/* system node       */
 	struct udf_node 	*metadatabitmap_node;	/* system node       */
-	struct space_bitmap_desc*metadata_unalloc_dscr;
-	struct udf_bitmap	 metadata_unalloc_bits;
+	struct space_bitmap_desc *metadata_unalloc_dscr;
+//	struct udf_bitmap	 metadata_unalloc_bits;
 	uint32_t		 metadata_alloc_unit_size;
 	uint16_t		 metadata_alignment_unit_size;
 	uint8_t			 metadata_flags;
@@ -300,7 +301,7 @@ struct udf_mount {
 /*	struct rb_tree	udf_node_tree; */
 
 	/* syncing */
-	int		syncing;			/* are we syncing?   */
+//	int		syncing;			/* are we syncing?   */
 /*	kcondvar_t 	dirtynodes_cv; */		/* sleeping on sync  */
 
 	/* late allocation */
@@ -309,11 +310,11 @@ struct udf_mount {
 //	uint64_t		*la_lmapping, *la_pmapping;	/* issue buf */
 
 	/* lists */
-	STAILQ_HEAD(udfmntpts, udf_mount) all_udf_mntpnts;
+//	STAILQ_HEAD(udfmntpts, udf_mount) all_udf_mntpnts;
 
 	/* device strategy */
-	struct udf_strategy	*strategy;
-	void			*strategy_private;
+//	struct udf_strategy	*strategy;
+//	void			*strategy_private;
 };
 
 #if 0
@@ -355,19 +356,19 @@ struct udf_node {
 	int			 needs_indirect;	/* has missing indr. */
 	struct long_ad		 ext_loc[UDF_MAX_ALLOC_EXTENTS];
 
-	struct dirhash		*dir_hash;
+//	struct dirhash		*dir_hash;
 
 	/* misc */
-	uint32_t		 i_flags;		/* associated flags  */
+//	uint32_t		 i_flags;		/* associated flags  */
 	struct lockf		*lockf;			/* lock list         */
 	uint32_t		 outstanding_bufs;	/* file data         */
 	uint32_t		 outstanding_nodedscr;	/* node dscr         */
 	int32_t			 uncommitted_lbs;	/* in UBC            */
 
 	/* references to associated nodes */
-	struct udf_node		*extattr;
-	struct udf_node		*streamdir;
-	struct udf_node		*my_parent;		/* if extended attr. */
+//	struct udf_node		*extattr;
+//	struct udf_node		*streamdir;
+//	struct udf_node		*my_parent;		/* if extended attr. */
 };
 
 

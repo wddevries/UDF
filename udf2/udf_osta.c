@@ -49,10 +49,11 @@ static uint16_t crc_table[256] = {
 uint16_t
 udf_cksum(unsigned char *s, int n)
 {
-	uint16_t crc=0;
+	uint16_t crc = 0;
 
 	while (n-- > 0)
-		crc = crc_table[(crc>>8 ^ *s++) & 0xff] ^ (crc<<8);
+		crc = crc_table[(crc >> 8 ^ *s++) & 0xff] ^ (crc << 8);
+
 	return (crc);
 }
 
@@ -65,16 +66,14 @@ udf_cksum(unsigned char *s, int n)
   *
   */
 uint16_t udf_ea_cksum(uint8_t *data) {
+        int count;
         uint16_t checksum = 0;
-        int      count;
 
-        for (count = 0; count < 48; count++) {
+        for (count = 0; count < 48; count++)
                checksum += *data++;
-        }
 
         return (checksum);
 }
-
 
 #ifdef MAIN
 unsigned char bytes[] = { 0x70, 0x6A, 0x77 };
@@ -82,8 +81,10 @@ unsigned char bytes[] = { 0x70, 0x6A, 0x77 };
 main(void)
 {
 	unsigned short x;
+
 	x = udf_cksum(bytes, sizeof bytes);
 	printf("checksum: calculated=%4.4x, correct=%4.4x\en", x, 0x3299);
+
 	exit(0);
 }
 #endif

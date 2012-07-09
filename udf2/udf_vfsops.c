@@ -53,9 +53,8 @@ uma_zone_t udf_zone_node = NULL;
 
 struct iconv_functions *udf2_iconv = NULL;
 
-static int udf_mountfs(struct vnode *, struct mount *); 
+static int	udf_mountfs(struct vnode *, struct mount *); 
 
-/* --------------------------------------------------------------------- */
 
 /* predefine vnode-op list descriptor */
 
@@ -81,7 +80,6 @@ VFS_SET(udf_vfsops, udf2, VFCF_READONLY);
 
 MODULE_VERSION(udf2, 1);
 
-/* --------------------------------------------------------------------- */
 
 static int
 udf_init(struct vfsconf *notused)
@@ -110,8 +108,6 @@ udf_uninit(struct vfsconf *notused)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
-
 #define MPFREE(a, lst) \
 	if ((a)) free((a), lst);
 static void
@@ -120,40 +116,40 @@ free_udf_mountinfo(struct mount *mp)
 	struct udf_mount *ump;
 	int i;
 
-	if (!mp)
+	if (mp == NULL)
 		return;
 
 	ump = VFSTOUDF(mp);
-	if (ump) {
+	if (ump != NULL) {
 		/* VAT partition support */
-		if (ump->vat_node)
+		if (ump->vat_node != NULL)
 			udf_dispose_node(ump->vat_node);
 
 		/* Metadata partition support */
-		if (ump->metadata_node)
+		if (ump->metadata_node != NULL)
 			udf_dispose_node(ump->metadata_node);
-		if (ump->metadatamirror_node)
+		if (ump->metadatamirror_node != NULL)
 			udf_dispose_node(ump->metadatamirror_node);
-		if (ump->metadatabitmap_node)
+		if (ump->metadatabitmap_node != NULL)
 			udf_dispose_node(ump->metadatabitmap_node);
 
 		/* clear our data */
 		for (i = 0; i < UDF_ANCHORS; i++)
 			MPFREE(ump->anchors[i], M_UDFTEMP);
-		MPFREE(ump->primary_vol,      M_UDFTEMP);
-		MPFREE(ump->logical_vol,      M_UDFTEMP);
-		MPFREE(ump->unallocated,      M_UDFTEMP);
-		MPFREE(ump->implementation,   M_UDFTEMP);
+		MPFREE(ump->primary_vol, M_UDFTEMP);
+		MPFREE(ump->logical_vol, M_UDFTEMP);
+		MPFREE(ump->unallocated, M_UDFTEMP);
+		MPFREE(ump->implementation, M_UDFTEMP);
 		MPFREE(ump->logvol_integrity, M_UDFTEMP);
 		for (i = 0; i < UDF_PARTITIONS; i++) {
-			MPFREE(ump->partitions[i],        M_UDFTEMP);
+			MPFREE(ump->partitions[i], M_UDFTEMP);
 			MPFREE(ump->part_unalloc_dscr[i], M_UDFTEMP);
-			MPFREE(ump->part_freed_dscr[i],   M_UDFTEMP);
+			MPFREE(ump->part_freed_dscr[i], M_UDFTEMP);
 		}
 		MPFREE(ump->metadata_unalloc_dscr, M_UDFTEMP);
 
-		MPFREE(ump->fileset_desc,   M_UDFTEMP);
-		MPFREE(ump->sparing_table,  M_UDFTEMP);
+		MPFREE(ump->fileset_desc, M_UDFTEMP);
+		MPFREE(ump->sparing_table, M_UDFTEMP);
 
 #if 0
 		MPFREE(ump->la_node_ad_cpy, M_UDFTEMP);
@@ -173,9 +169,6 @@ free_udf_mountinfo(struct mount *mp)
 	}
 }
 #undef MPFREE
-
-/* --------------------------------------------------------------------- */
-
 
 static int
 udf_mount(struct mount *mp)
@@ -219,9 +212,9 @@ udf_mount(struct mount *mp)
 	}
 
 	error = VOP_ACCESS(devvp, VREAD, td->td_ucred, td);
-	if (error)
+	if (error != 0)
 		error = priv_check(td, PRIV_VFS_MOUNT_PERM);
-	if (error) {
+	if (error != 0) {
 		vput(devvp);
 		return (error);
 	}
@@ -230,7 +223,8 @@ udf_mount(struct mount *mp)
 	/*
 	 * Open device and try to mount it!
 	 */
-	if ((error = udf_mountfs(devvp, mp))) {
+	error = udf_mountfs(devvp, mp);
+	if (error != 0) {
 		vrele(devvp);
 		return (error);
 	}
@@ -256,7 +250,7 @@ udf_mount(struct mount *mp)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
+
 #if 0
 #ifdef DEBUG
 static void
@@ -284,7 +278,7 @@ udf_unmount(struct mount *mp, int mntflags)
 	int error, flags;
 
 	ump = VFSTOUDF(mp);
-	if (!ump)
+	if (ump == NULL)
 		panic("UDF unmount: empty ump\n");
 
 	flags = (mntflags & MNT_FORCE) ? FORCECLOSE : 0;
@@ -301,7 +295,8 @@ udf_unmount(struct mount *mp, int mntflags)
 	 * This hardly documented feature allows us to exempt certain files
 	 * from being flushed.
 	 */
-	if ((error = vflush(mp, 0, flags, curthread)) != 0)
+	error = vflush(mp, 0, flags, curthread);
+	if (error != 0)
 		return (error);
 
 	/* update nodes and wait for completion of writeout of system nodes */
@@ -336,10 +331,10 @@ udf_unmount(struct mount *mp, int mntflags)
 #endif
 
 /* TODO: clean up iconv here */
-	if (ump->iconv_d2l)
+	if (ump->iconv_d2l != NULL)
 		udf2_iconv->close(ump->iconv_d2l);
 #if 0
-	if (ump->iconv_d2l)
+	if (ump->iconv_d2l != NULL)
 		udf2_iconv->close(ump->iconv_d2l);
 #endif
 
@@ -363,19 +358,16 @@ udf_unmount(struct mount *mp, int mntflags)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
-
 /*
  * Helper function of udf_mount() that actually mounts the disc.
  */
-
 static int
 udf_mountfs(struct vnode *devvp, struct mount *mp)
 {
 	struct g_consumer *cp;
 	struct cdev *dev;
-	struct udf_mount     *ump = NULL;
-	int    num_anchors, error, len, *udf_flags;
+	struct udf_mount *ump = NULL;
+	int error, len, num_anchors, *udf_flags;
 	uint32_t bshift, logvol_integrity, numsecs; /*lb_size,*/
 	char *cs_disk, *cs_local;
 	void *optdata;
@@ -395,7 +387,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	g_topology_unlock();
 	PICKUP_GIANT();
 	VOP_UNLOCK(devvp, 0);
-	if (error)
+	if (error != 0)
 		goto fail;
 
 
@@ -425,7 +417,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 #endif
 
 	/* set up linkage */
-	mp->mnt_data    = ump;
+	mp->mnt_data = ump;
 	ump->vfs_mountp = mp;
 	ump->devvp = devvp;
 	ump->dev = dev;
@@ -435,7 +427,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	/* Load flags for later.  Not sure what to use them for... */
 	udf_flags = NULL;
 	error = vfs_getopt(mp->mnt_optnew, "flags", (void **)&udf_flags, &len);
-	if (error || len != sizeof(int))
+	if (error != 0 || len != sizeof(int))
 		return (EINVAL);
 	ump->flags = *udf_flags;
 	
@@ -447,15 +439,16 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 
 	optdata = NULL;
 	error = vfs_getopt(mp->mnt_optnew, "first_trackblank", &optdata, &len);
-	if (error || len != sizeof(uint32_t)) {
+	if (error != 0 || len != sizeof(uint32_t)) {
 		error = EINVAL;
 		goto fail;
 	}
 	ump->first_trackblank = *(uint32_t *)optdata;
 	
 	optdata = NULL;
-	error = vfs_getopt(mp->mnt_optnew, "session_start_addr", &optdata, &len);
-	if (error || len != sizeof(uint32_t)) {
+	error = vfs_getopt(mp->mnt_optnew, "session_start_addr", &optdata,
+	    &len);
+	if (error != 0 || len != sizeof(uint32_t)) {
 		error = EINVAL;
 		goto fail;
 	}
@@ -463,7 +456,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 
 	optdata = NULL;
 	error = vfs_getopt(mp->mnt_optnew, "session_end_addr", &optdata, &len);
-	if (error || len != sizeof(uint32_t)) {
+	if (error != 0 || len != sizeof(uint32_t)) {
 		error = EINVAL;
 		goto fail;
 	}
@@ -485,7 +478,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 		ump->first_possible_vat_location = ump->session_start;
 	ump->last_possible_vat_location = ump->session_end;
 
-	if (ump->flags & UDFMNT_KICONV && udf2_iconv) {
+	if (ump->flags & UDFMNT_KICONV && udf2_iconv != NULL) {
 		cs_disk = "UTF-16BE";
 
 		cs_local = NULL;
@@ -565,7 +558,8 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	}
 
 	/* read in volume descriptor sequence */
-	if ((error = udf_read_vds_space(ump))) {
+	error = udf_read_vds_space(ump);
+	if (error != 0) {
 		printf("UDF mount: error reading volume space\n");
 		goto fail;
 	}
@@ -576,7 +570,8 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 #endif
 
 	/* check consistency and completeness */
-	if ((error = udf_process_vds(ump))) {
+	error = udf_process_vds(ump);
+	if (error != 0) {
 		printf( "UDF mount: disc not properly formatted(bad VDS)\n");
 		goto fail;
 	}
@@ -604,9 +599,10 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 
 	/* note that the mp info needs to be initialised for reading! */
 	/* read vds support tables like VAT, sparable etc. */
-	if ((error = udf_read_vds_tables(ump))) {
-		printf( "UDF mount: error in format or damaged disc "
-			"(VDS tables failing)\n");
+	error = udf_read_vds_tables(ump);
+	if (error != 0) {
+		printf("UDF mount: error in format or damaged disc "
+		    "(VDS tables failing)\n");
 		goto fail;
 	}
 
@@ -620,10 +616,10 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	}
 
 	/* read root directory */
-	if ((error = udf_read_rootdirs(ump))) {
-		printf( "UDF mount: "
-			"disc not properly formatted or damaged disc "
-			"(rootdirs failing)\n");
+	error = udf_read_rootdirs(ump);
+	if (error != 0) {
+		printf("UDF mount: disc not properly formatted or damaged disc "
+		    "(rootdirs failing)\n");
 		goto fail;
 	}
 
@@ -646,10 +642,9 @@ fail:
 		/*udf_discstrat_finish(VFSTOUDF(mp)); */
 		free_udf_mountinfo(mp);
 	}
+
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 int
 udf_root(struct mount *mp, int flags, struct vnode **vpp)
@@ -666,10 +661,9 @@ udf_root(struct mount *mp, int flags, struct vnode **vpp)
 		printf("NOT A ROOT NODE?");
 		return (EDOOFUS);
 	}
+
 	return (error);
 }
-
-/* --------------------------------------------------------------------- */
 
 int
 udf_statfs(struct mount *mp, struct statfs *sbp)
@@ -677,7 +671,7 @@ udf_statfs(struct mount *mp, struct statfs *sbp)
 	struct udf_mount *ump = VFSTOUDF(mp);
 	struct logvol_int_desc *lvid;
 	struct udf_logvol_info *impl;
-	uint64_t sizeblks, freeblks, files; 
+	uint64_t files, freeblks, sizeblks; 
 	int num_part;
 	
 /*	mutex_enter(&ump->allocate_mutex); */
@@ -688,16 +682,16 @@ udf_statfs(struct mount *mp, struct statfs *sbp)
 
 	lvid = ump->logvol_integrity;
 	num_part = le32toh(lvid->num_part);
-	impl = (struct udf_logvol_info *) (lvid->tables + 2*num_part);
-	if (impl) {
-		files  = le32toh(impl->num_files);
+	impl = (struct udf_logvol_info *)(lvid->tables + 2*num_part);
+	if (impl != NULL) {
+		files = le32toh(impl->num_files);
 		files += le32toh(impl->num_directories);
 	}
 /*	mutex_exit(&ump->allocate_mutex); */
 	
 	sbp->f_version = STATFS_VERSION; 	/* structure version number */
 	/*uint32_t f_type;*/			/* type of filesystem */
-	sbp->f_flags   = mp->mnt_flag; 		/* copy of mount exported flags */
+	sbp->f_flags = mp->mnt_flag; 		/* copy of mount exported flags */
 	sbp->f_bsize = ump->sector_size; 	/* filesystem fragment size */
 	sbp->f_iosize = ump->sector_size; 	/* optimal transfer block size */
 	sbp->f_blocks = sizeblks;		/* total data blocks in filesystem */
@@ -712,7 +706,7 @@ udf_statfs(struct mount *mp, struct statfs *sbp)
 	/*uint64_t f_spare[10];*/		/* unused spare */
 	/*uint32_t f_namemax;*/			/* maximum filename length */
 	/*uid_t	  f_owner;*/			/* user that mounted the filesystem */
-	/*fsid_t	  f_fsid;*/		/* filesystem id */
+	/*fsid_t  f_fsid;*/			/* filesystem id */
 	/*char	  f_charspare[80];*/	    	/* spare string space */
 	/*char	  f_fstypename[MFSNAMELEN];*/ 	/* filesystem type name */
 	/*char	  f_mntfromname[MNAMELEN];*/  	/* mounted filesystem */
@@ -720,8 +714,6 @@ udf_statfs(struct mount *mp, struct statfs *sbp)
 	
 	return (0);
 }
-
-/* --------------------------------------------------------------------- */
 
 /*
  * TODO what about writing out free space maps, lvid etc? only on `waitfor'
@@ -803,7 +795,6 @@ udf_free_node(struct udf_node *unode)
 {
 	uma_zfree(udf_zone_node, unode);
 }
-/* --------------------------------------------------------------------- */
 
 /*
  * Get vnode for the file system type specific file id ino for the fs. Its
@@ -823,7 +814,7 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	int error, udf_file_type;
 
 	error = vfs_hash_get(mp, ino, flags, curthread, vpp, NULL, NULL);
-	if (error || *vpp != NULL)
+	if (error != 0 || *vpp != NULL)
 		return (error);
 
 	if ((flags & LK_TYPE_MASK) == LK_SHARED) {
@@ -833,16 +824,17 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 
 	ump = VFSTOUDF(mp);
 	error = udf_getanode(mp, &nvp);
-	if (error)
+	if (error != 0)
 		return (error);
 	
 	lockmgr(nvp->v_vnlock, LK_EXCLUSIVE, NULL);
-	if ((error = insmntque(nvp, mp)) != 0)
+	error = insmntque(nvp, mp);
+	if (error != 0)
 		return (error);
 
 	/* TODO: Does this leak unode or vnodes? */
 	error = vfs_hash_insert(nvp, ino, flags, curthread, vpp, NULL, NULL);
-	if (error || *vpp != NULL)
+	if (error != 0 || *vpp != NULL)
 		return (error);
 
 
@@ -850,7 +842,7 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	 * Load read and set up the unode structure.
 	 */
 	error = udf_get_node(ump, ino, &unode);
-	if (error) {
+	if (error != 0) {
 		vgone(nvp);
 		vput(nvp);
 	}
@@ -869,7 +861,7 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	 * normal files, so we type them as having no type. UDF dictates that
 	 * they are not allowed to be visible.
 	 */
-	if (unode->fe)
+	if (unode->fe != NULL)
 		udf_file_type = unode->fe->icbtag.file_type;
 	else
 		udf_file_type = unode->efe->icbtag.file_type;
@@ -921,8 +913,6 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	return (0);
 }
 
-/* --------------------------------------------------------------------- */
-
 /*
  * Lookup vnode for file handle specified
  */
@@ -943,7 +933,7 @@ udf_fhtovp(struct mount *mp, struct fid *fhp, int flags,
 	}
 
 	udf_node = VTOI(vp);
-	if (udf_node->efe)
+	if (udf_node->efe != NULL)
 		filelen = le64toh(udf_node->efe->inf_len);
 	else
 		filelen = le64toh(udf_node->fe->inf_len);

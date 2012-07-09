@@ -1,4 +1,4 @@
-/*
+/*-
  * Copyright (c) 1992, 1993, 1994
  *      The Regents of the University of California.  All rights reserved.
  * Copyright (c) 2002 Scott Long
@@ -53,7 +53,6 @@
 #include <sys/ioctl.h>
 #include <sys/udfio.h>
 
-
 #include <err.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -73,11 +72,11 @@ struct mntopt mopts[] = {
 	MOPT_END
 };
 
-static int set_charset(char **, char **, const char *);
-static void get_session_info(char *dev, struct udf_session_info *usi, 
-   			 int session_num);
-static void usage(void);
-static void print_session_info(char *dev, int session_num);
+static void	get_session_info(char *dev, struct udf_session_info *usi, 
+   		    int session_num);
+static void	print_session_info(char *dev, int session_num);
+static int	set_charset(char **, char **, const char *);
+static void	usage(void);
 
 int
 main(int argc, char **argv)
@@ -85,9 +84,9 @@ main(int argc, char **argv)
 	struct udf_session_info usi;
 	struct iovec iov[18];
 	long session_num;
-	int ch, i, mntflags, opts, udf_flags, sessioninfo, verbose;
+	int ch, i, mntflags, opts, sessioninfo, udf_flags, verbose;
 	int32_t first_trackblank;
-	char *dev, *dir, mntpath[MAXPATHLEN], *cs_disk, *cs_local, *endp;
+	char *cs_disk, *cs_local, *dev, *dir, *endp, mntpath[MAXPATHLEN];
 
 	session_num = 0;
 	sessioninfo = 0;
@@ -96,24 +95,24 @@ main(int argc, char **argv)
 	cs_disk = cs_local = NULL;
 	while ((ch = getopt(argc, argv, "o:vC:s:p")) != -1)
 		switch (ch) {
-		case 'o':
-			getmntopts(optarg, mopts, &mntflags, &opts);
-			break;
-		case 'v':
-			verbose++;
-			break;
 		case 'C':
 			if (set_charset(&cs_disk, &cs_local, optarg) == -1)
 				err(EX_OSERR, "udf2_iconv");
 			udf_flags |= UDFMNT_KICONV;
+			break;
+		case 'o':
+			getmntopts(optarg, mopts, &mntflags, &opts);
+			break;
+		case 'p':
+			sessioninfo = 1;	
 			break;
 		case 's':
 			session_num = strtol(optarg, &endp, 10);
 			if (optarg == endp || *endp != '\0')
 				usage();	
 			break;
-		case 'p':
-			sessioninfo = 1;	
+		case 'v':
+			verbose++;
 			break;
 		case '?':
 		default:
@@ -122,7 +121,7 @@ main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
-	if (sessioninfo) {
+	if (sessioninfo == 1) {
 		if (argc != 1)
 			usage();
 		print_session_info(argv[0], session_num);
@@ -199,8 +198,10 @@ main(int argc, char **argv)
 		iov[i].iov_base = cs_local;
 		iov[i++].iov_len = strlen(cs_local) + 1;
 	}
+
 	if (nmount(iov, i, mntflags) < 0)
 		err(1, "%s", dev);
+
 	exit(0);
 }
 
@@ -211,7 +212,8 @@ set_charset(char **cs_disk, char **cs_local, const char *localcs)
 
 	if (modfind("udf2_iconv") < 0)
 		if (kldload("udf2_iconv") < 0 || modfind("udf2_iconv") < 0) {
-			warnx( "cannot find or load \"udf2_iconv\" kernel module");
+			warnx("cannot find or load \"udf2_iconv\" kernel"
+			    " module");
 			return (-1);
 		}
 
@@ -222,7 +224,7 @@ set_charset(char **cs_disk, char **cs_local, const char *localcs)
 	strncpy(*cs_disk, ENCODING_UNICODE, ICONV_CSNMAXLEN);
 	strncpy(*cs_local, localcs, ICONV_CSNMAXLEN);
 	error = kiconv_add_xlat16_cspairs(*cs_disk, *cs_local);
-	if (error)
+	if (error != 0)
 		return (-1);
 
 	return (0);
@@ -233,8 +235,8 @@ get_session_info(char *dev, struct udf_session_info *usi, int session_num)
 {
 	int fd, error;
 	unsigned int out;
-	fd = open(dev, O_RDONLY, 0);
 
+	fd = open(dev, O_RDONLY, 0);
 	if (fd < 0)
 		err(1, "open");
 
@@ -244,7 +246,8 @@ get_session_info(char *dev, struct udf_session_info *usi, int session_num)
 	if (error != 0) {
 		if (session_num != 0)
 			errx(EX_USAGE, "Cannot mount selected session.  This "
-			    "device does not properly support multi-sessions disc.");
+			    "device does not properly support multi-sessions "
+			    "disc.");
 		
 		warnx("Warning, this device does not properly support "
 		    "multi-sessions disc.");
@@ -265,7 +268,6 @@ print_session_info(char *dev, int session_num)
 	rmslashes(dev, dev);
 	get_session_info(dev, &usi, session_num);
 
-
 	printf("session_num: %u\n", usi.session_num);
 	
 	printf("sector_size: %u\n", usi.sector_size);
@@ -284,9 +286,9 @@ print_session_info(char *dev, int session_num)
 static void
 usage(void)
 {
-	(void)fprintf(stderr,
-		"usage: mount_udf [-v] [-o options] [-C charset] [-s session] special node\n");
-	(void)fprintf(stderr,
-		"usage: mount_udf [-p] [-s session] special\n");
+
+	(void)fprintf(stderr, "usage: mount_udf [-v] [-C charset] [-o options]"
+	    " [-s session] special node\n");
+	(void)fprintf(stderr, "usage: mount_udf [-p] [-s session] special\n");
 	exit(EX_USAGE);
 }

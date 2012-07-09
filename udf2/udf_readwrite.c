@@ -38,9 +38,8 @@
 #include "udf_subr.h"
 
 
-static int udf_read_phys_sectors(struct udf_mount *ump, int what, void *blob,
-	uint32_t start, uint32_t sectors);
-/* --------------------------------------------------------------------- */
+static int	udf_read_phys_sectors(struct udf_mount *ump, int what, 
+		    void *blob, uint32_t start, uint32_t sectors);
 
 #if 0
 void
@@ -239,8 +238,6 @@ udf_fixup_node_internals(struct udf_mount *ump, uint8_t *blob, int udf_c_type)
 }
 #endif
 
-/* --------------------------------------------------------------------- */
-
 /*
  * Set of generic descriptor readers and writers and their helper functions.
  * Descriptors inside `logical space' i.e. inside logically mapped partitions
@@ -258,19 +255,20 @@ udf_read_node(struct udf_node *unode, uint8_t *blob, off_t start, int length)
 	struct vnode *devvp = unode->ump->devvp;
 	struct buf *bp; /* *buf, *nestbuf, ; */
 	uint64_t file_size, lsect;
-	int icbflags, addr_type, exttype, error = 0;
-	uint32_t sector_size, blkinsect, fileblk, fileblkoff, numlsect, numb;
+	int addr_type, exttype, error, icbflags;
+	uint32_t blkinsect, fileblk, fileblkoff, numb, numlsect, sector_size;
 	uint8_t  *pos;
 
+	error = 0;
 	sector_size = unode->ump->sector_size;
 	blkinsect = sector_size / DEV_BSIZE;
 
 	if (unode->fe) {
-		pos      = &unode->fe->data[0] + le32toh(unode->fe->l_ea);
+		pos = &unode->fe->data[0] + le32toh(unode->fe->l_ea);
 		icbflags = le16toh(unode->fe->icbtag.flags);
 		file_size = le64toh(unode->fe->inf_len);
 	} else {
-		pos      = &unode->efe->data[0] + le32toh(unode->efe->l_ea);
+		pos = &unode->efe->data[0] + le32toh(unode->efe->l_ea);
 		icbflags = le16toh(unode->efe->icbtag.flags);
 		file_size = le64toh(unode->efe->inf_len);
 	}
@@ -289,7 +287,7 @@ udf_read_node(struct udf_node *unode, uint8_t *blob, off_t start, int length)
 	while (length) {
 		error = udf_bmap_translate(unode, fileblk, &exttype, &lsect,
 		    &numlsect);
-		if (error)
+		if (error != 0)
 			return (error);
 
 		if (exttype == UDF_TRAN_ZERO) {
@@ -298,12 +296,13 @@ udf_read_node(struct udf_node *unode, uint8_t *blob, off_t start, int length)
 			length -= numb;
 			blob += numb;
 			fileblkoff = 0;
-		} else if (exttype == UDF_TRAN_INTERN) {
+		} else if (exttype == UDF_TRAN_INTERN)
 			return (EDOOFUS);
-		} else {
+		else {
 			while (numlsect > 0) {
-				if ((error = bread(devvp, lsect*blkinsect, sector_size, NOCRED,
-				   		&bp)) != 0) {
+				error = bread(devvp, lsect * blkinsect,
+				    sector_size, NOCRED, &bp);
+				if (error != 0) {
 					if (buf != NULL)
 						brelse(bp);
 					return (error);
@@ -324,26 +323,27 @@ udf_read_node(struct udf_node *unode, uint8_t *blob, off_t start, int length)
 		
 		fileblk += numlsect;
 	}
+
 	return (0);
 }
 
 /* SYNC reading of n blocks from specified sector */
 static int
 udf_read_phys_sectors(struct udf_mount *ump, int what, void *blob,
-	uint32_t start, uint32_t sectors)
+    uint32_t start, uint32_t sectors)
 {
+	struct vnode *devvp = ump->devvp;
 	struct buf *bp; /* *buf, *nestbuf, ; */
 	int error = 0; /* piece; */
 	/* off_t lblkno, rblkno; */
-	uint32_t sector_size, blks; /* buf_offset; */
-	struct vnode *devvp = ump->devvp;
+	uint32_t blks, sector_size; /* buf_offset; */
 
 	sector_size = ump->sector_size;
 	blks = sector_size / DEV_BSIZE;
 
 	while (sectors > 0 && error == 0) {
-		if ((error = bread(devvp, start*blks, sector_size, NOCRED,
-				   &bp)) != 0) {
+		error = bread(devvp, start * blks, sector_size, NOCRED, &bp);
+		if (error != 0) {
 			if (buf != NULL)
 				brelse(bp);
 			return (error);
@@ -353,7 +353,7 @@ udf_read_phys_sectors(struct udf_mount *ump, int what, void *blob,
 		brelse(bp);
 		bp = NULL;
 
-		blob = (void *) ((uint8_t *)blob + sector_size);
+		blob = (void *)((uint8_t *)blob + sector_size);
 		start++;
 		sectors--;
 	}
@@ -410,14 +410,13 @@ udf_read_phys_sectors(struct udf_mount *ump, int what, void *blob,
 #endif
 }
 
-
 /* synchronous generic descriptor read */
 int
 udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
-		    struct malloc_type *mtype, union dscrptr **dstp)
+    struct malloc_type *mtype, union dscrptr **dstp)
 {
 	union dscrptr *dst, *new_dst;
-	int sectors, dscrlen, i, error, sector_size;
+	int dscrlen, error, i, sectors, sector_size;
 	uint8_t *pos;
 
 	sector_size = ump->sector_size;
@@ -432,12 +431,13 @@ udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
 	if (!error) {
 		/* check if its a valid tag */
 		error = udf_check_tag(dst);
-		if (error) {
+		if (error != 0) {
 			/* check if its an empty block */
-			pos = (uint8_t *) dst;
-			for (i = 0; i < sector_size; i++, pos++) {
-				if (*pos) break;
-			}
+			pos = (uint8_t *)dst;
+			for (i = 0; i < sector_size; i++, pos++)
+				if (*pos)
+					break;
+
 			if (i == sector_size) {
 				/* return no error but with no dscrptr */
 				/* dispose first block */
@@ -463,11 +463,11 @@ udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
 		}
 		dst = new_dst;
 
-		sectors = (dscrlen + sector_size -1) / sector_size;
+		sectors = (dscrlen + sector_size - 1) / sector_size;
 	
-		pos = (uint8_t *) dst + sector_size;
-		error = udf_read_phys_sectors(ump, UDF_C_DSCR, pos,
-				sector + 1, sectors-1);
+		pos = (uint8_t *)dst + sector_size;
+		error = udf_read_phys_sectors(ump, UDF_C_DSCR, pos, sector + 1,
+		    sectors - 1);
 	}
 	if (!error)
 		error = udf_check_tag_payload(dst, dscrlen);
@@ -479,7 +479,6 @@ udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
 
 	return (error);
 }
-
 
 #if 0
 static void
@@ -659,9 +658,6 @@ udf_write_phys_dscr_async(struct udf_mount *ump, struct udf_node *udf_node,
 	return 0;
 }
 
-/* --------------------------------------------------------------------- */
-
-/* disc strategy dispatchers */
 
 int
 udf_create_logvol_dscr(struct udf_mount *ump, struct udf_node *udf_node, struct long_ad *icb,
@@ -778,5 +774,4 @@ void udf_discstrat_finish(struct udf_mount *ump)
 	}
 }
 #endif
-/* --------------------------------------------------------------------- */
 

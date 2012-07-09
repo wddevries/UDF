@@ -1,6 +1,6 @@
 INSTALLATION:
 1. Rebuild and install kernel with 'driver.patch'.  This will enable mount_udf2
-to read session information from DVD devices.  CD devices are not supported 
+to read session information from DVD drives.  CD drives are not supported 
 yet.  (The file system will work with decreased functionality without this
 step.)
 
@@ -8,7 +8,7 @@ step.)
 'udf2_iconv', and then 'mount_udf2'.  
 
 REMAINING WORK ITEMS:
- * Add support for CD devices to driver.patch
+ * Add support for CD drives to driver.patch
  * Extensive testing, including with metadata partition disk.
  * Check length of vat before allocating memory.
  * Fix udf_get_node_id and udf_get_node_longad.
