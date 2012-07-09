@@ -28,16 +28,16 @@
 #include <sys/param.h>
 #include <sys/endian.h>
 #include <sys/cdefs.h>
-#include <sys/kernel.h> /* needed by malloc.h */
+#include <sys/kernel.h>
 #include <sys/malloc.h>
-#include <sys/systm.h> /* printf */
-#include <sys/fcntl.h> /* needed by namei.h */
+#include <sys/systm.h>
+#include <sys/fcntl.h>
 #include <sys/namei.h>
-#include <sys/proc.h> /* thread */
+#include <sys/proc.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
-#include <sys/conf.h> /* dev_ref */
-#include <sys/module.h> /* MODULE_VERSION */
+#include <sys/conf.h>
+#include <sys/module.h>
 #include <sys/priv.h>
 #include <sys/iconv.h>
 #include <geom/geom.h>

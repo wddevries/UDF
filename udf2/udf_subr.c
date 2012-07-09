@@ -29,11 +29,11 @@
 #include <sys/cdefs.h>
 #include <sys/endian.h>
 #include <sys/param.h>
-#include <sys/systm.h> /* KASSERT */
+#include <sys/systm.h>
 #include <sys/vnode.h>
 #include <sys/malloc.h>
 #include <sys/stat.h>
-#include <sys/mount.h> /* We shouldn't be, but are dependent on this header. */
+#include <sys/mount.h>
 #include <sys/iconv.h>
 
 #include "ecma167-udf.h"

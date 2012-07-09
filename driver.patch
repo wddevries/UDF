@@ -1,5 +1,5 @@
 diff --git sys/cam/scsi/scsi_cd.c sys/cam/scsi/scsi_cd.c
-index d45d49a..56f071d 100644
+index d45d49a..7383068 100644
 --- sys/cam/scsi/scsi_cd.c
 +++ sys/cam/scsi/scsi_cd.c
 @@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
@@ -52,7 +52,7 @@ index d45d49a..56f071d 100644
  	default:
  		cam_periph_lock(periph);
  		error = cam_periph_ioctl(periph, cmd, addr, cderror);
-@@ -2741,6 +2770,406 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
+@@ -2741,6 +2770,408 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
  	return (error);
  }
  
@@ -158,6 +158,8 @@ index d45d49a..56f071d 100644
 +	int sessionstatus;
 +
 +	/* Read get config and header data. */
++	seqmedia = 0;
++	linkblkpenalty = 0;
 +	error = cdrecordedsequentially(periph, &seqmedia, &linkblkpenalty);
 +	if (error)
 +		return error;

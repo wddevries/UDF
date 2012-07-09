@@ -81,9 +81,6 @@
 
 /* constants */
 #define UDF_MAX_NAMELEN		255			/* as per SPEC */
-//#define UDF_TRANS_ZERO	((uint64_t) -1)
-//#define UDF_TRANS_UNMAPPED	((uint64_t) -2)
-//#define UDF_TRANS_INTERN	((uint64_t) -3)
 #define UDF_TRAN_EXTERNAL	0
 #define UDF_TRAN_INTERN		1
 #define UDF_TRAN_ZERO		2

@@ -32,20 +32,21 @@
 #include <sys/param.h>
 #include <sys/cdefs.h>
 #include <sys/endian.h>
-#include <sys/systm.h> /* printf, bzero, etc */
-#include <sys/namei.h> /* componentname */
-#include <sys/buf.h> /* buf */
+#include <sys/systm.h>
+#include <sys/namei.h>
+#include <sys/buf.h>
 #include <sys/mount.h>
 #include <sys/vnode.h>
 #include <sys/malloc.h>
 #include <sys/dirent.h>
-#include <sys/unistd.h> /* udf_pathconf */
+#include <sys/unistd.h>
 #include <sys/bio.h>
 
 #include "ecma167-udf.h"
 #include "udf.h"
 #include "udf_subr.h"
 
+//#include <fs/fifofs/fifo.h>
 
 static vop_access_t	udf_access;
 static vop_bmap_t       udf_bmap;

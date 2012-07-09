@@ -56,25 +56,6 @@ udf_cksum(unsigned char *s, int n)
 	return (crc);
 }
 
-#if 0
-/* UNICODE Checksum */
-unsigned short
-udf_unicode_cksum(unsigned short *s, int n)
-{
-	unsigned short crc=0;
-
-	while (n-- > 0) {
-		/* Take high order byte first--corresponds to a big endian
-		 * byte stream.
-		 */
-		crc = crc_table[(crc>>8 ^ (*s>>8)) & 0xff] ^ (crc<<8);
-		crc = crc_table[(crc>>8 ^ (*s++ & 0xff)) & 0xff] ^ (crc<<8);
-	}
-	return (crc);
-}
-#endif
-
-
 /*
   * Calculates a 16-bit checksum of the Implementation Use
   * Extended Attribute header or Application Use Extended Attribute

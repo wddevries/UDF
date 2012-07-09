@@ -27,7 +27,7 @@
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/iconv.h>
-#include <sys/systm.h> /* printf */
+#include <sys/systm.h>
 
 #include "ecma167-udf.h"
 #include "udf.h"
