@@ -10,6 +10,5 @@ step.)
 REMAINING WORK ITEMS:
  * Add support for CD devices to driver.patch
  * Extensive testing, including with metadata partition disk.
- * Clean up messages and functionality in mount_udf2.
  * Check length of vat before allocating memory.
  * Fix udf_get_node_id and udf_get_node_longad.
