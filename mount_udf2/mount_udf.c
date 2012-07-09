@@ -228,33 +228,6 @@ set_charset(char **cs_disk, char **cs_local, const char *localcs)
 	return (0);
 }
 
-#if 0
-static void
-get_session_info_cd(int fd, struct udf_session_info *usi)
-{
-	int error;
-	struct ioc_read_toc_entry t;
-	struct cd_toc_entry te;
-
-	t.address_format = CD_LBA_FORMAT;
-	t.starting_track = 0xaa; //CD_TRACK_LEADOUT;
-	t.data_len = sizeof(struct cd_toc_entry);
-	t.data = &te;
-
-	error = ioctl(fd, CDIOREADTOCENTRYS, &t);
-	if (error) {
-		warnx("This device does not support locating the last written block.");
-		usi->session_end_addr = 0;
-	} else {
-		usi->session_end_addr = (unsigned int)te.addr.lba;
-		usi->session_end_addr = be32toh(usi->session_end_addr);
-	}
-	usi->session_start_addr = 0;
-
-	return;
-}
-#endif
-
 static void
 get_session_info(char *dev, struct udf_session_info *usi, int session_num)
 {
