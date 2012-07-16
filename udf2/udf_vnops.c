@@ -128,10 +128,10 @@ udf_inactive(void *v)
 	 * referenced anymore in a directory we ought to free up the resources
 	 * on disc if applicable.
 	 */
-	if (udf_node->fe) {
+	if (udf_node->fe != NULL) {
 		refcnt = le16toh(udf_node->fe->link_cnt);
 	} else {
-		assert(udf_node->efe);
+		assert(udf_node->efe != NULL);
 		refcnt = le16toh(udf_node->efe->link_cnt);
 	}
 
@@ -303,14 +303,14 @@ udf_write(void *v)
 	}
 
 	assert(udf_node);
-	assert(udf_node->fe || udf_node->efe);
+	assert(udf_node->fe != NULL || udf_node->efe != NULL);
 
 	/* get file/directory filesize */
-	if (udf_node->fe) {
+	if (udf_node->fe != NULL) {
 		fe = udf_node->fe;
 		file_size = le64toh(fe->inf_len);
 	} else {
-		assert(udf_node->efe);
+		assert(udf_node->efe != NULL);
 		efe = udf_node->efe;
 		file_size = le64toh(efe->inf_len);
 	}
@@ -325,7 +325,7 @@ udf_write(void *v)
 		DPRINTF(WRITE, ("extending file from %"PRIu64" to %"PRIu64"\n",
 			file_size, uio->uio_offset + uio->uio_resid));
 		error = udf_grow_node(udf_node, uio->uio_offset + uio->uio_resid);
-		if (error)
+		if (error != 0)
 			return (error);
 		file_size = uio->uio_offset + uio->uio_resid;
 	}
@@ -346,13 +346,13 @@ udf_write(void *v)
 		genfs_node_wrlock(vp);
 		error = GOP_ALLOC(vp, uio->uio_offset, len, aflag, cred);
 		genfs_node_unlock(vp);
-		if (error)
+		if (error != 0)
 			break;
 
 		/* ubc, here we come, prepare to trap */
 		error = ubc_uiomove(uobj, uio, len, advice,
 		    UBC_WRITE | UBC_UNMAP_FLAG(vp));
-		if (error)
+		if (error != 0)
 			break;
 
 		/*
@@ -384,7 +384,7 @@ udf_write(void *v)
 	if (resid > uio->uio_resid)
 		VN_KNOTE(vp, NOTE_WRITE | (extended ? NOTE_EXTEND : 0));
 
-	if (error) {
+	if (error != 0) {
 		/* bring back file size to its former size */
 		/* take notice of its errors? */
 		(void) udf_chsize(vp, (u_quad_t) old_size, cred);
@@ -1007,7 +1007,7 @@ udf_chown(struct vnode *vp, uid_t new_uid, gid_t new_gid,
 
 	/* check permissions */
 	error = genfs_can_chown(vp, cred, uid, gid, new_uid, new_gid);
-	if (error)
+	if (error != 0)
 		return (error);
 
 	/* change the ownership */
@@ -1042,7 +1042,7 @@ udf_chmod(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 
 	/* check permissions */
 	error = genfs_can_chmod(vp, cred, uid, gid, mode);
-	if (error)
+	if (error != 0)
 		return (error);
 
 	/* change mode */
@@ -1143,7 +1143,7 @@ udf_chtimes(struct vnode *vp,
 
 	/* check permissions */
 	error = genfs_can_chtimes(vp, setattrflags, uid, cred);
-	if (error)
+	if (error != 0)
 		return (error);
 
 	/* update node flags depending on what times are passed */
@@ -1315,7 +1315,7 @@ udf_close(void *v)
 	if (!async && (vp->v_type != VDIR)) {
 		mutex_enter(&vp->v_interlock);
 		error = VOP_PUTPAGES(vp, 0, 0, PGO_CLEANIT);
-		if (error)
+		if (error != 0)
 			return (error);
 	}
 
@@ -1483,7 +1483,7 @@ udf_do_link(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 
 	/* lock node */
 	error = vn_lock(vp, LK_EXCLUSIVE);
-	if (error)
+	if (error != 0)
 		return (error);
 
 	/* get attributes */
@@ -1491,7 +1491,7 @@ udf_do_link(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 	udf_node = VTOI(vp);
 
 	error = VOP_GETATTR(vp, &vap, FSCRED);
-	if (error) {
+	if (error != 0) {
 		VOP_UNLOCK(vp);
 		return (error);
 	}
@@ -1503,7 +1503,7 @@ udf_do_link(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 	}
 
 	error = udf_dir_attach(dir_node->ump, dir_node, udf_node, &vap, cnp);
-	if (error)
+	if (error != 0)
 		VOP_UNLOCK(vp);
 	return (error);
 }
@@ -1522,7 +1522,7 @@ udf_link(void *v)
 	int error;
 
 	error = udf_do_link(dvp, vp, cnp);
-	if (error)
+	if (error != 0)
 		VOP_ABORTOP(dvp, cnp);
 
 	VN_KNOTE(vp, NOTE_LINK);
@@ -1621,14 +1621,14 @@ udf_do_symlink(struct udf_node *udf_node, char *target)
 		pathlen += len;
 	}
 
-	if (error) {
+	if (error != 0) {
 		/* aparently too big */
 		free(pathbuf, M_UDFTEMP);
 		return (error);
 	}
 
 	error = udf_grow_node(udf_node, pathlen);
-	if (error) {
+	if (error != 0) {
 		/* failed to pregrow node */
 		free(pathbuf, M_UDFTEMP);
 		return (error);
@@ -1665,12 +1665,12 @@ udf_symlink(void *v)
 
 	error = udf_create_node(dvp, vpp, vap, cnp);
 	KASSERT(((error == 0) && (*vpp != NULL)) || ((error && (*vpp == NULL))));
-	if (!error) {
+	if (error == 0) {
 		dir_node = VTOI(dvp);
 		udf_node = VTOI(*vpp);
 		KASSERT(udf_node);
 		error = udf_do_symlink(udf_node, ap->a_target);
-		if (error) {
+		if (error != 0) {
 			/* remove node */
 			udf_shrink_node(udf_node, 0);
 			udf_dir_detach(udf_node->ump, dir_node, udf_node, cnp);
@@ -1889,7 +1889,7 @@ udf_on_rootpath(struct udf_node *source, struct udf_node *target)
 
 		if (!found)
 			error = ENOENT;
-		if (error)
+		if (error != 0)
 			goto out;
 
 		/* did we encounter source node? */
@@ -1911,7 +1911,7 @@ udf_on_rootpath(struct udf_node *source, struct udf_node *target)
 		DPRINTF(NODE, ("\tgetting the .. node\n"));
 		error = udf_get_node(ump, &icb_loc, &res_node);
 
-		if (error) {	/* argh, bail out */
+		if (error != 0) {	/* argh, bail out */
 			KASSERT(res_node == NULL);
 			// res_node = NULL;
 			goto out;
@@ -2013,7 +2013,7 @@ udf_rename(void *v)
 
 		DPRINTF(NODE, ("Dir rename allowed ? %s\n", error ? "NO":"YES"));
 
-		if (error) {
+		if (error != 0) {
 			/* compensate for our vref earlier */
 			vrele(tdvp);
 			goto out;
@@ -2028,7 +2028,7 @@ udf_rename(void *v)
 		 */
 		tcnp->cn_flags &= ~SAVESTART;
 		error = relookup(tdvp, &tvp, tcnp);
-		if (error) {
+		if (error != 0) {
 			vput(tdvp);
 			goto out;
 		}
@@ -2041,21 +2041,21 @@ udf_rename(void *v)
 
 	/* create new directory entry for the node */
 	error = udf_dir_attach(tdnode->ump, tdnode, fnode, &fvap, tcnp);
-	if (error)
+	if (error != 0)
 		goto out;
 
 	/* unlink old directory entry for the node, if failing, unattach new */
 	error = udf_dir_detach(tdnode->ump, fdnode, fnode, fcnp);
-	if (error)
+	if (error != 0)
 		udf_dir_detach(tdnode->ump, tdnode, fnode, tcnp);
-	if (error)
+	if (error != 0)
 		goto out;
 
 	/* update tnode's '..' if moving directory to new parent */
 	if ((fdnode != tdnode) && (fvp->v_type == VDIR)) {
 		/* update fnode's '..' entry */
 		error = udf_dir_update_rootentry(fnode->ump, fnode, tdnode);
-		if (error) {
+		if (error != 0) {
 			/* 'try' to recover from this situation */
 			udf_dir_attach(tdnode->ump, fdnode, fnode, &fvap, fcnp);
 			udf_dir_detach(tdnode->ump, tdnode, fnode, tcnp);
@@ -2149,7 +2149,7 @@ udf_rmdir(void *v)
 
 	/* check to see if the directory is empty */
 	error = 0;
-	if (dir_node->fe) {
+	if (dir_node->fe != NULL) {
 		refcnt = le16toh(udf_node->fe->link_cnt);
 	} else {
 		refcnt = le16toh(udf_node->efe->link_cnt);
@@ -2257,7 +2257,7 @@ udf_fsync(void *v)
 	/* write out node and wait for it if requested */
 	DPRINTF(SYNC, ("udf_fsync %p, writeout node\n", udf_node));
 	error = udf_writeout_node(udf_node, wait);
-	if (error)
+	if (error != 0)
 		return (error);
 
 	/* TODO/XXX if ap->a_flags & FSYNC_CACHE, we ought to do a disc sync */
@@ -2284,11 +2284,11 @@ udf_advlock(void *v)
 	DPRINTF(LOCKING, ("udf_advlock called\n"));
 
 	/* get directory filesize */
-	if (udf_node->fe) {
+	if (udf_node->fe != NULL) {
 		fe = udf_node->fe;
 		file_size = le64toh(fe->inf_len);
 	} else {
-		assert(udf_node->efe);
+		assert(udf_node->efe != NULL);
 		efe = udf_node->efe;
 		file_size = le64toh(efe->inf_len);
 	}

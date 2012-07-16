@@ -735,13 +735,13 @@ udf_sync_writeout_system_files(struct udf_mount *ump, int clearflags)
 	if (ump->lvclose & UDF_WRITE_PART_BITMAPS) {
 		/* writeout metadata spacetable if existing */
 		error = udf_write_metadata_partition_spacetable(ump, MNT_WAIT);
-		if (error)
+		if (error != 0)
 			printf( "udf_writeout_system_files : "
 				" writeout of metadata space bitmap failed\n");
 
 		/* writeout partition spacetables */
 		error = udf_write_physical_partition_spacetables(ump, MNT_WAIT);
-		if (error)
+		if (error != 0)
 			printf( "udf_writeout_system_files : "
 				"writeout of space tables failed\n");
 		if (!error && clearflags)
@@ -867,32 +867,32 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 		udf_file_type = unode->efe->icbtag.file_type;
 		
 	switch (udf_file_type) {
-	case UDF_ICB_FILETYPE_DIRECTORY :
-	case UDF_ICB_FILETYPE_STREAMDIR :
+	case UDF_ICB_FILETYPE_DIRECTORY:
+	case UDF_ICB_FILETYPE_STREAMDIR:
 		nvp->v_type = VDIR;
 		break;
-	case UDF_ICB_FILETYPE_BLOCKDEVICE :
+	case UDF_ICB_FILETYPE_BLOCKDEVICE:
 		nvp->v_type = VBLK;
 		break;
-	case UDF_ICB_FILETYPE_CHARDEVICE :
+	case UDF_ICB_FILETYPE_CHARDEVICE:
 		nvp->v_type = VCHR;
 		break;
-	case UDF_ICB_FILETYPE_SOCKET :
+	case UDF_ICB_FILETYPE_SOCKET:
 		nvp->v_type = VSOCK;
 		break;
-	case UDF_ICB_FILETYPE_FIFO :
+	case UDF_ICB_FILETYPE_FIFO:
 		nvp->v_type = VFIFO;
 		break;
-	case UDF_ICB_FILETYPE_SYMLINK :
+	case UDF_ICB_FILETYPE_SYMLINK:
 		nvp->v_type = VLNK;
 		break;
-	case UDF_ICB_FILETYPE_VAT :
-	case UDF_ICB_FILETYPE_META_MAIN :
-	case UDF_ICB_FILETYPE_META_MIRROR :
+	case UDF_ICB_FILETYPE_VAT:
+	case UDF_ICB_FILETYPE_META_MAIN:
+	case UDF_ICB_FILETYPE_META_MIRROR:
 		nvp->v_type = VNON;
 		break;
-	case UDF_ICB_FILETYPE_RANDOMACCESS :
-	case UDF_ICB_FILETYPE_REALTIME :
+	case UDF_ICB_FILETYPE_RANDOMACCESS:
+	case UDF_ICB_FILETYPE_REALTIME:
 		nvp->v_type = VREG;
 		break;
 	default:

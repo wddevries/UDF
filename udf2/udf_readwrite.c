@@ -104,19 +104,19 @@ udf_fixup_internal_extattr(uint8_t *blob, uint32_t lb_num)
 	/* get information from fe/efe */
 	tag = (struct desc_tag *) blob;
 	switch (udf_rw16(tag->id)) {
-	case TAGID_FENTRY :
+	case TAGID_FENTRY:
 		fe = (struct file_entry *) blob;
 		l_ea  = udf_rw32(fe->l_ea);
 		eahdr = (struct extattrhdr_desc *) fe->data;
 		break;
-	case TAGID_EXTFENTRY :
+	case TAGID_EXTFENTRY:
 		efe = (struct extfile_entry *) blob;
 		l_ea  = udf_rw32(efe->l_ea);
 		eahdr = (struct extattrhdr_desc *) efe->data;
 		break;
-	case TAGID_INDIRECTENTRY :
-	case TAGID_ALLOCEXTENT :
-	case TAGID_EXTATTR_HDR :
+	case TAGID_INDIRECTENTRY:
+	case TAGID_ALLOCEXTENT:
+	case TAGID_EXTATTR_HDR:
 		return;
 	default:
 		panic("%s: passed bad tag\n", __func__);
@@ -130,12 +130,12 @@ udf_fixup_internal_extattr(uint8_t *blob, uint32_t lb_num)
 	/* check extended attribute tag */
 	/* TODO XXX what to do when we encounter an error here? */
 	error = udf_check_tag(eahdr);
-	if (error)
+	if (error != 0)
 		return;	/* for now */
 	if (udf_rw16(eahdr->tag.id) != TAGID_EXTATTR_HDR)
 		return;	/* for now */
 	error = udf_check_tag_payload(eahdr, sizeof(struct extattrhdr_desc));
-	if (error)
+	if (error != 0)
 		return; /* for now */
 #endif
 
@@ -175,7 +175,7 @@ udf_fixup_node_internals(struct udf_mount *ump, uint8_t *blob, int udf_c_type)
 
 	tag = (struct desc_tag *) blob;
 	switch (udf_rw16(tag->id)) {
-	case TAGID_FENTRY :
+	case TAGID_FENTRY:
 		fe = (struct file_entry *) tag;
 		l_ea = udf_rw32(fe->l_ea);
 		icbflags  = udf_rw16(fe->icbtag.flags);
@@ -186,7 +186,7 @@ udf_fixup_node_internals(struct udf_mount *ump, uint8_t *blob, int udf_c_type)
 		max_intern_pos = intern_pos + udf_rw64(fe->inf_len);
 		lb_num = udf_rw32(fe->tag.tag_loc);
 		break;
-	case TAGID_EXTFENTRY :
+	case TAGID_EXTFENTRY:
 		efe = (struct extfile_entry *) tag;
 		l_ea = udf_rw32(efe->l_ea);
 		icbflags  = udf_rw16(efe->icbtag.flags);
@@ -197,10 +197,10 @@ udf_fixup_node_internals(struct udf_mount *ump, uint8_t *blob, int udf_c_type)
 		max_intern_pos = intern_pos + udf_rw64(efe->inf_len);
 		lb_num = udf_rw32(efe->tag.tag_loc);
 		break;
-	case TAGID_INDIRECTENTRY :
-	case TAGID_EXTATTR_HDR :
+	case TAGID_INDIRECTENTRY:
+	case TAGID_EXTATTR_HDR:
 		break;
-	case TAGID_ALLOCEXTENT :
+	case TAGID_ALLOCEXTENT:
 		/* force crclen to 8 for UDF version < 2.01 */
 		ext = (struct alloc_ext_entry *) tag;
 		if (udf_rw16(ump->logvol_info->min_udf_readver) <= 0x200)
@@ -263,7 +263,7 @@ udf_read_node(struct udf_node *unode, uint8_t *blob, off_t start, int length)
 	sector_size = unode->ump->sector_size;
 	blkinsect = sector_size / DEV_BSIZE;
 
-	if (unode->fe) {
+	if (unode->fe != NULL) {
 		pos = &unode->fe->data[0] + le32toh(unode->fe->l_ea);
 		icbflags = le16toh(unode->fe->icbtag.flags);
 		file_size = le64toh(unode->fe->inf_len);
@@ -428,7 +428,7 @@ udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
 	dst = malloc(sector_size, mtype, M_WAITOK);
 	error = udf_read_phys_sectors(ump, UDF_C_DSCR, dst, sector, 1);
 
-	if (!error) {
+	if (error == 0) {
 		/* check if its a valid tag */
 		error = udf_check_tag(dst);
 		if (error != 0) {
@@ -469,7 +469,7 @@ udf_read_phys_dscr(struct udf_mount *ump, uint32_t sector,
 		error = udf_read_phys_sectors(ump, UDF_C_DSCR, pos, sector + 1,
 		    sectors - 1);
 	}
-	if (!error)
+	if (error == 0)
 		error = udf_check_tag_payload(dst, dscrlen);
 	if (error && dst) {
 		free(dst, mtype);
