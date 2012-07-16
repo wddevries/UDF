@@ -594,7 +594,7 @@ udf_check_tag(void *blob)
 	pos = (uint8_t *)tag;
 	sum = 0;
 
-	for(cnt = 0; cnt < 16; cnt++) {
+	for (cnt = 0; cnt < 16; cnt++) {
 		if (cnt != 4)
 			sum += *pos;
 		pos++;
@@ -645,7 +645,7 @@ udf_validate_tag_sum(void *blob)
 	pos = (uint8_t *)tag;
 	sum = 0;
 
-	for(cnt = 0; cnt < 16; cnt++) {
+	for (cnt = 0; cnt < 16; cnt++) {
 		if (cnt != 4) sum += *pos;
 		pos++;
 	}
@@ -1283,7 +1283,7 @@ udf_loose_lvint_history(struct udf_mount *ump)
 	out_len   = out_trace->end - out_trace->start;
 
 	last_dscr = NULL;
-	for(;;) {
+	for (;;) {
 		out_trace->pos  = out_wpos;
 		out_trace->wpos = out_trace->pos;
 		if (in_pos >= in_len) {

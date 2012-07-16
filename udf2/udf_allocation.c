@@ -617,7 +617,7 @@ udf_bmap_translate(struct udf_node *udf_node, uint32_t block,
 	uint16_t vpart_num;
 
 
-	if (!udf_node)
+	if (udf_node == NULL)
 		return (ENOENT);
 
 	KASSERT(num_lb > 0,("num_lb > 0"));
