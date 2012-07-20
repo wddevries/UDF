@@ -32,6 +32,7 @@
 #define VTOI(vnode) ((struct udf_node *) (vnode)->v_data)
 
 struct buf;
+struct long_ad;
 
 /* device information updating */
 //int	udf_update_trackinfo(struct udf_mount *ump, 
@@ -134,7 +135,7 @@ void	udf_lock_node(struct udf_node *udf_node, int flag, char const *fname,
 	    const int lineno);
 void	udf_unlock_node(struct udf_node *udf_node, int flag);
 
-int	udf_get_node(struct udf_mount *ump, ino_t ino,
+int	udf_get_node(struct udf_mount *ump, struct long_ad icb_loc,
 	    struct udf_node **ppunode);
 //int	udf_writeout_node(struct udf_node *udf_node, int waitfor);
 int	udf_dispose_node(struct udf_node *node);
@@ -191,8 +192,8 @@ int	udf_lookup_name_in_dir(struct vnode *vp, const char *name, int namelen,
 
 /* helpers and converters */
 //void	udf_init_nodes_tree(struct udf_mount *ump);
-long	udf_get_node_id(const struct long_ad *icbptr);    /* for `inode' numbering */
-int	udf_get_node_longad(const ino_t ino, struct long_ad *icbptr);
+int	udf_get_node_id(const struct long_ad icbptr, ino_t *ino);
+void	udf_get_node_longad(const ino_t ino, struct long_ad *icbptr);
 //int	udf_compare_icb(const struct long_ad *a, const struct long_ad *b);
 uint32_t udf_getaccessmode(struct udf_node *node);
 //void	udf_setaccessmode(struct udf_node *udf_node, mode_t mode);

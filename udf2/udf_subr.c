@@ -2950,7 +2950,6 @@ udf_search_vat(struct udf_mount *ump)
 	/* struct vnode *vp; */
 	struct long_ad icb_loc;
 	struct udf_node *vat_node;
-	ino_t ino;
 	int error;
 	uint32_t early_vat_loc, vat_loc;
 	uint16_t tagid;
@@ -2983,15 +2982,11 @@ udf_search_vat(struct udf_mount *ump)
 				icb_loc.loc.part_num = 
 				    htole16(UDF_VTOP_RAWPART);
 				icb_loc.loc.lb_num = htole32(vat_loc);
-				ino = udf_get_node_id(&icb_loc);
-				error = udf_get_node(ump, ino, &vat_node);
-				/* error = udf_vget(ump->vfs_mountp, ino, LK_EXCLUSIVE, &vp); */
-				/* vat_node = VTOI(vp); */
-				if (error == 0) {
+				error = udf_get_node(ump, icb_loc, &vat_node);
+				if (error == 0)
 					error = udf_check_for_vat(vat_node);
-					if (error == 0)
-						break;
-				}
+				if (error == 0)
+					break;
 			}
 		}
 		
@@ -3048,11 +3043,7 @@ udf_read_metadata_nodes(struct udf_mount *ump, union udf_pmap *mapping)
 {
 	struct part_map_meta *pmm = &mapping->pmm;
 	struct long_ad icb_loc;
-#if 0
-	struct vnode *vp;
-#endif
-	int error;
-	ino_t ino;
+	int error = 0;
 
 	/* extract our allocation parameters set up on format */
 	ump->metadata_alloc_unit_size = le32toh(mapping->pmm.alloc_unit_size);
@@ -3064,8 +3055,7 @@ udf_read_metadata_nodes(struct udf_mount *ump, union udf_pmap *mapping)
 	icb_loc.loc.part_num = pmm->part_num;
 	icb_loc.loc.lb_num = pmm->meta_file_lbn;
 	/* DPRINTF(VOLUMES, ("Metadata file\n")); */
-	ino = udf_get_node_id(&icb_loc);
-	error = udf_get_node(ump, ino, &ump->metadata_node);
+	udf_get_node(ump, icb_loc, &ump->metadata_node);
 #if 0
 	if (ump->metadata_node) {
 		vp = ump->metadata_node->vnode;
@@ -3076,8 +3066,7 @@ udf_read_metadata_nodes(struct udf_mount *ump, union udf_pmap *mapping)
 	icb_loc.loc.lb_num = pmm->meta_mirror_file_lbn;
 	if (icb_loc.loc.lb_num != -1) {
 		/* DPRINTF(VOLUMES, ("Metadata copy file\n")); */
-		ino = udf_get_node_id(&icb_loc);
-		error = udf_get_node(ump, ino, &ump->metadatamirror_node);
+		udf_get_node(ump, icb_loc, &ump->metadatamirror_node);
 #if 0
 		if (ump->metadatamirror_node) {
 			vp = ump->metadatamirror_node->vnode;
@@ -3089,8 +3078,7 @@ udf_read_metadata_nodes(struct udf_mount *ump, union udf_pmap *mapping)
 	icb_loc.loc.lb_num = pmm->meta_bitmap_file_lbn;
 	if (icb_loc.loc.lb_num != -1) {
 		/* DPRINTF(VOLUMES, ("Metadata bitmap file\n")); */
-		ino = udf_get_node_id(&icb_loc);
-		error = udf_get_node(ump, ino, &ump->metadatabitmap_node);
+		udf_get_node(ump, icb_loc, &ump->metadatabitmap_node);
 #if 0
 		if (ump->metadatabitmap_node) {
 			vp = ump->metadatabitmap_node->vnode;
@@ -3268,8 +3256,9 @@ udf_read_rootdirs(struct udf_mount *ump)
 
 	/* try to read in the rootdir */
 	dir_loc = &ump->fileset_desc->rootdir_icb;
-	ino = udf_get_node_id(dir_loc);
-	error = udf_vget(mp, ino, LK_EXCLUSIVE, &rootdir_node);
+	error = udf_get_node_id(*dir_loc, &ino);
+	if (error == 0)
+		error = udf_vget(mp, ino, LK_EXCLUSIVE, &rootdir_node);
 	if (error != 0)
 		return (ENOENT);
 
@@ -3282,8 +3271,10 @@ udf_read_rootdirs(struct udf_mount *ump)
 	dir_loc = &ump->fileset_desc->streamdir_icb;
 	if (le32toh(dir_loc->len)) {
 		printf("udf_read_rootdirs: streamdir defined ");
-		ino = udf_get_node_id(dir_loc);
-		error = udf_vget(mp, ino, LK_EXCLUSIVE, &streamdir_node);
+		error = udf_get_node_id(*dir_loc, &ino);
+		if (error == 0)
+			error = udf_vget(mp, ino, LK_EXCLUSIVE, 
+			    &streamdir_node);
 		if (error != 0)
 			printf("but error in streamdir reading\n");
 		else {
@@ -3304,34 +3295,38 @@ udf_read_rootdirs(struct udf_mount *ump)
 	return (0);
 }
 
-/* To make absolutely sure we are NOT returning zero, add one :) */
-long
-udf_get_node_id(const struct long_ad *icbptr)
+/* 
+ * To make absolutely sure we are NOT returning zero, add one.  This can fail,
+ * but in final version should probably never fail.
+ */
+int
+udf_get_node_id(const struct long_ad icbptr, ino_t *ino)
 {
-	/* this can fail, but in final version should never fail. */
-	uint32_t blkn, ino;
+	uint32_t blkn;
 	uint16_t part;
 
 	/* Just for now, this should be done in another way. */
-	blkn = le32toh(icbptr->loc.lb_num);
-	part = le16toh(icbptr->loc.part_num);
+	blkn = le32toh(icbptr.loc.lb_num);
+	part = le16toh(icbptr.loc.part_num);
 
 	if ((blkn + 1) & 0xE0000000) {
-		printf("block number too large to convert to inode number.\n");
+		printf("Block number too large to convert to inode number.\n");
+		return EDOOFUS;
 	}
 	if (part & 0xFFF8) {
-		printf("partition number too large to convert to inode "
+		printf("Partition number too large to convert to inode "
 		    "number.\n");
+		return EDOOFUS;
 	}
 
-	ino = (blkn + 1) | (part << 29);
+	*ino = (blkn + 1) | (part << 29);
 	//printf("Raw blkno: %u, raw part: %u\n", icbptr->loc.lb_num, icbptr->loc.part_num);
 	//printf("udf_get_node_id -- blkno: %u, part: %u, ino: %u\n", blkn, part, ino);
 
-	return (ino);
+	return (0);
 }
 
-int
+void
 udf_get_node_longad(const ino_t ino, struct long_ad *icbptr)
 {
 	uint32_t blkn, ino2;
@@ -3347,7 +3342,6 @@ udf_get_node_longad(const ino_t ino, struct long_ad *icbptr)
 
 	//printf("Raw blkno: %u, raw part: %u\n", icbptr->loc.lb_num, icbptr->loc.part_num);
 	//printf("udf_get_node_longad -- blkno: %u, part: %u, ino: %u\n", blkn, part, ino2);
-	return (0);
 }
 
 #if 0
@@ -5157,17 +5151,16 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
  */
 
 int
-udf_get_node(struct udf_mount *ump, ino_t ino, struct udf_node **ppunode)
+udf_get_node(struct udf_mount *ump, struct long_ad icb_loc,
+    struct udf_node **ppunode)
 {
 	union dscrptr *dscr;
-	struct long_ad icb_loc, last_fe_icb_loc;
+	struct long_ad last_fe_icb_loc;
 	struct udf_node *udf_node;
 	uint64_t file_size;
 	int dscr_type, eof, error, needs_indirect, slot, strat, strat4096;
 	uint32_t dummy, lb_size, sector;
 	uint8_t  *file_data;
-
- 	udf_get_node_longad(ino, &icb_loc);
 
 	/* garbage check: translate udf_node_icb_loc to sectornr */
 	error = udf_translate_vtop(ump, &icb_loc, &sector, &dummy);
@@ -5176,7 +5169,6 @@ udf_get_node(struct udf_mount *ump, ino_t ino, struct udf_node **ppunode)
 
 	/* initialise crosslinks, note location of fe/efe for hashing */
 	udf_node = udf_alloc_node();
-	udf_node->hash_id = ino;
 	udf_node->ump = ump;
 	udf_node->loc = icb_loc;
 	udf_node->lockf = 0;

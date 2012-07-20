@@ -649,15 +649,14 @@ fail:
 int
 udf_root(struct mount *mp, int flags, struct vnode **vpp)
 {
-	struct long_ad *dir_loc;
 	struct udf_mount *ump = VFSTOUDF(mp);
 	ino_t ino;
 	int error;
 
-	dir_loc = &ump->fileset_desc->rootdir_icb;
-	ino = udf_get_node_id(dir_loc);
-	error = udf_vget(mp, ino, flags, vpp);
-	if (!((*vpp)->v_vflag & VV_ROOT)) {
+	error = udf_get_node_id(ump->fileset_desc->rootdir_icb, &ino);
+	if (error == 0)
+		error = udf_vget(mp, ino, flags, vpp);
+	if (error != 0 && ((*vpp)->v_vflag & VV_ROOT) == 0) {
 		printf("NOT A ROOT NODE?");
 		return (EDOOFUS);
 	}
@@ -811,6 +810,7 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	struct vnode *nvp;
 	struct udf_node *unode;
 	struct udf_mount *ump;
+	struct long_ad icb;
 	int error, udf_file_type;
 
 	error = vfs_hash_get(mp, ino, flags, curthread, vpp, NULL, NULL);
@@ -841,17 +841,21 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	/* 
 	 * Load read and set up the unode structure.
 	 */
-	error = udf_get_node(ump, ino, &unode);
+	udf_get_node_longad(ino, &icb);
+	error = udf_get_node(ump, icb, &unode);
 	if (error != 0) {
 		vgone(nvp);
 		vput(nvp);
+		return (error);
 	}
 	nvp->v_data = unode;
 	unode->vnode = nvp;
+	unode->hash_id = ino;
 
 	/* mark the root node as such */
 	if (ump->fileset_desc && 
-	    ino == udf_get_node_id(&ump->fileset_desc->rootdir_icb)) 
+	    icb.loc.lb_num == ump->fileset_desc->rootdir_icb.loc.lb_num && 
+	    icb.loc.part_num == ump->fileset_desc->rootdir_icb.loc.part_num)
 		nvp->v_vflag |= VV_ROOT;
 
 	/*

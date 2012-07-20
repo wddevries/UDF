@@ -567,7 +567,7 @@ udf_readdir(struct vop_readdir_args /* {
 	 */
 	if (uio->uio_offset == 0) {
 		memset(dirent, 0, sizeof(struct dirent));
-		dirent->d_fileno = udf_get_node_id(&udf_node->loc);
+		dirent->d_fileno = udf_node->hash_id;
 		dirent->d_type = DT_DIR;
 		dirent->d_name[0] = '.';
 		dirent->d_name[1] = '\0';
@@ -609,9 +609,11 @@ udf_readdir(struct vop_readdir_args /* {
 			 * create resulting dirent structure 
 			 */
 			memset(dirent, 0, sizeof(struct dirent));
-			dirent->d_fileno = udf_get_node_id(&fid->icb); /* inode hash XXX */
+			error = udf_get_node_id(fid->icb, &dirent->d_fileno); /* inode hash XXX */
+			if (error != 0)
+				break;
 
-			/* Going for the filetypes now too expensive. */
+			/* Going for the filetypes now is too expensive. */
 			dirent->d_type = DT_UNKNOWN;
 			if (fid->file_char & UDF_FILE_CHAR_DIR)
 				dirent->d_type = DT_DIR;
@@ -759,7 +761,7 @@ lookuploop:
 		
 		if (fid->file_char & UDF_FILE_CHAR_PAR) {
 			if (cnp->cn_flags & ISDOTDOT) {
-				id = udf_get_node_id(&fid->icb);
+				error = udf_get_node_id(fid->icb, &id);
 				break;
 			}
 		}
@@ -772,7 +774,7 @@ lookuploop:
 			if (unix_len == cnp->cn_namelen) {
 				if (!strncmp(unix_name, cnp->cn_nameptr, 
 				    cnp->cn_namelen)) {
-					id = udf_get_node_id(&fid->icb);
+					error = udf_get_node_id(fid->icb, &id);
 					break;
 				}
 			}
@@ -935,7 +937,7 @@ udf_getattr(struct vop_getattr_args *ap)
 	vap->va_uid = uid;
 	vap->va_gid = gid;
 	vap->va_fsid = dev2udev(ump->dev); /* vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0]; */
-	vap->va_fileid = udf_get_node_id(&udf_node->loc); /* inode hash XXX */
+	vap->va_fileid = udf_node->hash_id; /* inode hash XXX */
 	vap->va_size = filesize;
 	vap->va_blocksize = ump->sector_size; /* wise? */
 
