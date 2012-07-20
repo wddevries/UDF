@@ -63,6 +63,7 @@
 
 #define UDF_MAX_MAPPINGS	(MAXPHYS/DEV_BSIZE)	/* 128 */
 #endif
+#define UDF_VAT_ALLOC_LIMIT	104857600		/* picked at random */
 #define UDF_VAT_CHUNKSIZE	(64*1024)		/* picked */
 #define UDF_SYMLINKBUFLEN	(64*1024)		/* picked */
 

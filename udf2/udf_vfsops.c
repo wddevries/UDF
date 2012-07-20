@@ -472,8 +472,8 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 		ump->session_end = numsecs;
 
 	/* We should only need to search one, so this is also a hack. */
-	if (ump->session_end - ump->session_start > 256)
-		ump->first_possible_vat_location = ump->session_end - 256; 
+	if (ump->session_end - ump->session_start > 25)
+		ump->first_possible_vat_location = ump->session_end - 25; 
 	else
 		ump->first_possible_vat_location = ump->session_start;
 	ump->last_possible_vat_location = ump->session_end;

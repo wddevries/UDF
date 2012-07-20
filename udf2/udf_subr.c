@@ -2830,15 +2830,12 @@ udf_check_for_vat(struct udf_node *vat_node)
 		((vat_length + UDF_VAT_CHUNKSIZE - 1) / UDF_VAT_CHUNKSIZE)
 			* UDF_VAT_CHUNKSIZE;
 
-	vat_table = malloc(vat_table_alloc_len, M_UDFTEMP, M_WAITOK); 
-#if 0
-	/*M_CANFAIL was removed from third arg */
-	if (vat_table == NULL) {
-		printf("allocation of %d bytes failed for VAT\n",
-			vat_table_alloc_len);
+	if (vat_table_alloc_len > UDF_VAT_ALLOC_LIMIT) {
+		printf("Allocation of %d bytes failed for VAT; length exceeded"
+		    " implementation limit.\n", vat_table_alloc_len);
 		return (ENOMEM);
 	}
-#endif
+	vat_table = malloc(vat_table_alloc_len, M_UDFTEMP, M_WAITOK); 
 
 	/* allocate piece to read in head or tail of VAT file */
 	raw_vat = malloc(sector_size, M_UDFTEMP, M_WAITOK);
