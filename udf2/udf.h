@@ -141,11 +141,6 @@
 #define UDF_REMAP_BLOCK		  0x02	/* remap the failing block length    */
 #define UDFONERROR_BITS "\20\1UPDATE_TRACKINFO\2REMAP_BLOCK"
 
-
-/* readdir cookies */
-#define UDF_DIRCOOKIE_DOT 1
-
-
 /* malloc pools */
 MALLOC_DECLARE(M_UDFTEMP);
 

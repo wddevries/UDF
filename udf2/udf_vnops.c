@@ -522,15 +522,17 @@ udf_readdir(struct vop_readdir_args /* {
 	struct dirent *dirent;
 	struct udf_mount *ump;
 	struct udf_node *udf_node;
-	uint64_t cookie, *cookies, *cookiesp, diroffset, file_size, transoffset;
+	uint64_t *cookies, *cookiesp, diroffset, file_size, transoffset;
 	int acookies, error, ncookies;
 	uint32_t lb_size;
 	uint8_t *fid_name;
 	
+	error = 0;
 	uio = ap->a_uio;
 	vp = ap->a_vp;
 	udf_node = VTOI(vp);
 	ump = udf_node->ump;
+	transoffset = uio->uio_offset;
 
 	/* This operation only makes sense on directory nodes. */
 	if (vp->v_type != VDIR)
@@ -548,8 +550,8 @@ udf_readdir(struct vop_readdir_args /* {
 	dirent = malloc(sizeof(struct dirent), M_UDFTEMP, M_WAITOK | M_ZERO);
 	if (ap->a_ncookies != NULL) {
 		/* is this the max number possible? */
-		ncookies = uio->uio_resid / 8;
-		cookies = malloc(sizeof(u_long) * ncookies, M_UDFTEMP, 
+		ncookies = 1; //uio->uio_resid / 8;
+		cookies = malloc(sizeof(u_long) * ncookies, M_TEMP, 
 		    M_WAITOK | M_ZERO);
 		if (cookies == NULL)
 			return (ENOMEM);
@@ -565,7 +567,7 @@ udf_readdir(struct vop_readdir_args /* {
 	 * Add `.' pseudo entry if at offset zero since its not in the fid
 	 * stream
 	 */
-	if (uio->uio_offset == 0) {
+	if (transoffset == 0) {
 		memset(dirent, 0, sizeof(struct dirent));
 		dirent->d_fileno = udf_node->hash_id;
 		dirent->d_type = DT_DIR;
@@ -575,28 +577,27 @@ udf_readdir(struct vop_readdir_args /* {
 		dirent->d_reclen = GENERIC_DIRSIZ(dirent);
 		if (cookiesp != NULL) {
 			acookies++;
-			*cookiesp++ = 1;
+			*cookiesp++ = 1; // next one
 		}
 		error = uiomove(dirent, GENERIC_DIRSIZ(dirent), uio);
 		if (error != 0)
 			goto bail;
 
-		/* mark with magic value that we have done the dummy */
-		uio->uio_offset = UDF_DIRCOOKIE_DOT;
+		/* in case the directory size is 0 or 1? */
+		transoffset = 1;
 	}
 
 	/* we are called just as long as we keep on pushing data in */
-	error = 0;
-	if (uio->uio_offset < file_size) {
+	if (transoffset < file_size) {
 		/* allocate temporary space for fid */
 		lb_size = le32toh(udf_node->ump->logical_vol->lb_size);
 		fid = malloc(lb_size, M_UDFTEMP, M_WAITOK);
 
-		if (uio->uio_offset == UDF_DIRCOOKIE_DOT)
-			uio->uio_offset = 0;
+		if (transoffset == 1)
+			diroffset = 0;
+		else
+			diroffset = transoffset;
 
-		diroffset = uio->uio_offset;
-		transoffset = diroffset;
 		while (diroffset < file_size) {
 			/* transfer a new fid/dirent */
 			error = udf_read_fid_stream(vp, &diroffset, fid);
@@ -624,14 +625,11 @@ udf_readdir(struct vop_readdir_args /* {
 				dirent->d_name[1] = '.';
 				dirent->d_name[2] = '\0';
 				dirent->d_namlen = 2;
-				cookie = 2;
-			}
-			else {
+			} else {
 				fid_name = fid->data + le16toh(fid->l_iu);
 				udf_to_unix_name(ump, dirent->d_name, MAXNAMLEN,
 				    fid_name, fid->l_fi);
 				dirent->d_namlen = strlen(dirent->d_name);
-				cookie = transoffset;
 			}
 			dirent->d_reclen = GENERIC_DIRSIZ(dirent);
 
@@ -642,26 +640,26 @@ udf_readdir(struct vop_readdir_args /* {
 			if (uio->uio_resid < GENERIC_DIRSIZ(dirent))
 				break;
 
-			/* remember the last entry we transfered */
-			transoffset = diroffset;
-
-			/* skip deleted entries */
-			if (fid->file_char & UDF_FILE_CHAR_DEL)
+			/* skip deleted and not visible files */
+			if (fid->file_char & UDF_FILE_CHAR_DEL ||
+			    fid->file_char & UDF_FILE_CHAR_VIS) {
+				transoffset = diroffset;
+				if (cookiesp != NULL && acookies > 0)
+					*(cookiesp - 1) = transoffset;
 				continue;
-
-			/* skip not visible files */
-			if (fid->file_char & UDF_FILE_CHAR_VIS)
-				continue;
+			}
 
 			/* copy dirent to the caller */
 			if (cookiesp != NULL) {
-				/*
-				if (++acookies >= ncookies)
+				if (acookies + 1 > ncookies)
 					break; 
-				*/
 				acookies++;
-				*cookiesp++ = cookie;
+				*cookiesp++ = diroffset;
 			}
+
+			/* remember the last entry we transfered */
+			transoffset = diroffset;
+
 			error = uiomove(dirent, GENERIC_DIRSIZ(dirent), uio);
 			if (error != 0)
 				break;
@@ -669,12 +667,14 @@ udf_readdir(struct vop_readdir_args /* {
 
 		/* pass on last transfered offset */
 		/* We lied for '.', so tell more lies. */
-		uio->uio_offset = transoffset; 
 		free(fid, M_UDFTEMP);
 	}
 
+	uio->uio_offset = transoffset; 
+
 bail:
-	*ap->a_eofflag = (uio->uio_offset >= file_size);
+	if (ap->a_eofflag != NULL)
+		*ap->a_eofflag = uio->uio_offset >= file_size;
 
 	if (ap->a_ncookies != NULL) {
 		if (error != 0)

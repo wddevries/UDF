@@ -10,6 +10,3 @@ step.)
 REMAINING WORK ITEMS:
  * Add support for CD drives to driver.patch
  * Extensive testing, including with metadata partition disk.
- * Check length of vat before allocating memory.
- * Fix udf_get_node_id and udf_get_node_longad.
- * Is the readdir code correct?
