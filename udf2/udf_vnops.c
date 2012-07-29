@@ -550,7 +550,7 @@ udf_readdir(struct vop_readdir_args /* {
 	dirent = malloc(sizeof(struct dirent), M_UDFTEMP, M_WAITOK | M_ZERO);
 	if (ap->a_ncookies != NULL) {
 		/* is this the max number possible? */
-		ncookies = 1; //uio->uio_resid / 8;
+		ncookies = uio->uio_resid / 8;
 		cookies = malloc(sizeof(u_long) * ncookies, M_TEMP, 
 		    M_WAITOK | M_ZERO);
 		if (cookies == NULL)
