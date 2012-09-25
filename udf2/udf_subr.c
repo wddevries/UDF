@@ -938,6 +938,9 @@ udf_read_anchors(struct udf_mount *ump)
 			if (error == 0) {
 				anchorsp++;
 				ok++;
+			} else if (anch == 2) {
+				printf("UDF mount: No anchor at end of volumn."
+				    "(This is not an error in the volumn.)\n");
 			}
 		}
 	}
@@ -2986,7 +2989,7 @@ udf_search_vat(struct udf_mount *ump)
 					break;
 			}
 		}
-		
+printf("VAT not found at last possible location\n");
 		vat_loc--;	/* walk backwards */
 	} while (vat_loc >= early_vat_loc);
 
