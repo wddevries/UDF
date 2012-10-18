@@ -221,6 +221,7 @@ struct udf_mount {
 	uint32_t		 first_trackblank;
 	uint32_t 		 session_start;
 	uint32_t		 session_end;
+	uint32_t		 session_last_written;
 
 	/* format descriptors */
 /*	kmutex_t		 logvol_mutex; */  /* Who needs locks... */

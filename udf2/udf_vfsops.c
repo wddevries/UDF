@@ -439,11 +439,11 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 
 	optdata = NULL;
 	error = vfs_getopt(mp->mnt_optnew, "first_trackblank", &optdata, &len);
-	if (error != 0 || len != sizeof(uint32_t)) {
+	if (error != 0 || len != sizeof(uint8_t)) {
 		error = EINVAL;
 		goto fail;
 	}
-	ump->first_trackblank = *(uint32_t *)optdata;
+	ump->first_trackblank = *(uint8_t *)optdata;
 	
 	optdata = NULL;
 	error = vfs_getopt(mp->mnt_optnew, "session_start_addr", &optdata,
@@ -462,6 +462,14 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	}
 	ump->session_end = *(uint32_t *)optdata;
 
+	optdata = NULL;
+	error = vfs_getopt(mp->mnt_optnew, "session_last_written", &optdata, &len);
+	if (error != 0 || len != sizeof(uint32_t)) {
+		error = EINVAL;
+		goto fail;
+	}
+	ump->session_last_written = *(uint32_t *)optdata;
+
 	/* We do not want the session_end value to be zero. */
 	numsecs = cp->provider->mediasize / cp->provider->sectorsize;
 	if (ump->session_end == 0)
@@ -476,10 +484,11 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 
 	/* We should only need to search one, so this is also a hack. */
 	if (ump->session_end - ump->session_start > 25)
-		ump->first_possible_vat_location = ump->session_end - 25; 
+		ump->first_possible_vat_location = ump->session_last_written -
+		    25; 
 	else
 		ump->first_possible_vat_location = ump->session_start;
-	ump->last_possible_vat_location = ump->session_end;
+	ump->last_possible_vat_location = ump->session_last_written;
 
 	if (ump->flags & UDFMNT_KICONV && udf2_iconv != NULL) {
 		cs_disk = "UTF-16BE";

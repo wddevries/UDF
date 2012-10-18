@@ -831,10 +831,10 @@ udf_print_anchors(struct udf_mount *ump)
 		printf("\tTag Serial number: %d\n", a->tag.serial_num);
 		printf("\tTag Location: %d\n", a->tag.tag_loc);
 
-		printf("\tmain volumn descriptor seq extent: %d, len: %d\n",
+		printf("\tmain volume descriptor seq extent: %d, len: %d\n",
 			a->main_vds_ex.loc, a->main_vds_ex.len);
 		
-		printf("\tmain volumn descriptor seq extent: %d, len: %d\n",
+		printf("\tmain volume descriptor seq extent: %d, len: %d\n",
 			a->reserve_vds_ex.loc, a->reserve_vds_ex.len);
 	}
 }
@@ -938,9 +938,6 @@ udf_read_anchors(struct udf_mount *ump)
 			if (error == 0) {
 				anchorsp++;
 				ok++;
-			} else if (anch == 2) {
-				printf("UDF mount: No anchor at end of volumn."
-				    "(This is not an error in the volumn.)\n");
 			}
 		}
 	}

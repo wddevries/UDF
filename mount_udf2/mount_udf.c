@@ -82,7 +82,7 @@ int
 main(int argc, char **argv)
 {
 	struct udf_session_info usi;
-	struct iovec iov[18];
+	struct iovec iov[20];
 	long session_num;
 	int ch, i, mntflags, opts, sessioninfo, udf_flags, verbose;
 	int32_t first_trackblank;
@@ -174,9 +174,8 @@ main(int argc, char **argv)
 
 	iov[i].iov_base = "first_trackblank";
 	iov[i++].iov_len = sizeof("first_trackblank");
-	first_trackblank = 0;
-	iov[i].iov_base = &first_trackblank;
-	iov[i++].iov_len = sizeof(uint32_t);
+	iov[i].iov_base = &usi.session_first_track_blank;
+	iov[i++].iov_len = sizeof(uint8_t);
 
 	iov[i].iov_base = "session_start_addr";
 	iov[i++].iov_len = sizeof("session_start_addr");
@@ -186,6 +185,11 @@ main(int argc, char **argv)
 	iov[i].iov_base = "session_end_addr";
 	iov[i++].iov_len = sizeof("session_end_addr");
 	iov[i].iov_base = &usi.session_end_addr;
+	iov[i++].iov_len = sizeof(uint32_t);
+
+	iov[i].iov_base = "session_last_written";
+	iov[i++].iov_len = sizeof("session_last_written");
+	iov[i].iov_base = &usi.session_last_written;
 	iov[i++].iov_len = sizeof(uint32_t);
 
 	if (udf_flags & UDFMNT_KICONV) {
@@ -242,7 +246,7 @@ get_session_info(char *dev, struct udf_session_info *usi, int session_num)
 
 	bzero(usi, sizeof(struct udf_session_info));
 	usi->session_num = session_num;
-	error = ioctl(fd, UDFIOREADDISCINFO, usi);
+	error = ioctl(fd, UDFIOREADSESSIONINFO, usi);
 	if (error != 0) {
 		if (session_num != 0)
 			errx(EX_USAGE, "Cannot mount selected session.  This "
@@ -268,17 +272,17 @@ print_session_info(char *dev, int session_num)
 	rmslashes(dev, dev);
 	get_session_info(dev, &usi, session_num);
 
-	printf("session_num: %u\n", usi.session_num);
+	printf("Number of Sessions: %u\n", usi.num_sessions);
+	printf("Number of Tracks: %u\n", usi.num_tracks);
+	printf("First Track Number: %u\n", usi.first_track);
+	printf("Sector Size: %u\n", usi.sector_size);
 	
-	printf("sector_size: %u\n", usi.sector_size);
-	printf("num_sessions: %u\n", usi.num_sessions);
-	printf("session_start_addr: %u\n", usi.session_start_addr);
-	printf("session_end_addr: %u\n", usi.session_end_addr);
-	
-	printf("num_tracks: %u\n", usi.num_tracks);
-	printf("first_track: %u\n", usi.first_track);
-	printf("session_first_track: %u\n", usi.session_first_track);
-	printf("session_last_track: %u\n", usi.session_last_track);
+	printf("Session Number: %u\n", usi.session_num);
+	printf("Session Start Address: %u\n", usi.session_start_addr);
+	printf("Session End Address: %u\n", usi.session_end_addr);
+	printf("Last Written Address in Session: %u\n", usi.session_last_written);
+	printf("First Track Number of Session: %u\n", usi.session_first_track);
+	printf("Last Track of Session: %u\n", usi.session_last_track);
 
 	exit(0);
 }
