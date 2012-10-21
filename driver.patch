@@ -299,10 +299,10 @@ index 7b24ddb..d8f8207 100644
  cdprevent(struct cam_periph *periph, int action)
  {
 diff --git sys/cam/scsi/scsi_cd.h sys/cam/scsi/scsi_cd.h
-index f502d66..b2b2e1e 100644
+index f502d66..5100fbe 100644
 --- sys/cam/scsi/scsi_cd.h
 +++ sys/cam/scsi/scsi_cd.h
-@@ -56,6 +56,147 @@
+@@ -56,6 +56,108 @@
   * SCSI command format
   */
  
@@ -312,44 +312,9 @@ index f502d66..b2b2e1e 100644
 +{
 +	uint8_t op_code;
 +	uint8_t byte2;
-+#define GC_RT_ALLFEATURES	0x00 /* Return header and all features active or not. */
-+#define GC_RT_CURFEATURES	0x01 /* Return header and all active features. */
 +#define GC_RT_ONEFEATURE	0x02 /* Return header and zero or one feature. */
 +	uint8_t start_feature[2];
-+#define GC_FC_PROFILE_LIST		0x0000
-+#define GC_FC_CORE			0x0001
-+#define GC_FC_MORPHING			0x0002 
-+#define GC_FC_REMOVABLE_MEDIUM		0x0003
-+#define GC_FC_WRITE_PROTECT		0x0004
-+#define GC_FC_RANDOM_READABLE		0x0010
-+#define GC_FC_MULTIREAD			0x001D
-+#define GC_FC_CD_READ			0x001E
-+#define GC_FC_DVD_READ			0x001F
-+#define GC_FC_RANDOM_WRITABLE		0x0020
 +#define GC_FC_INCR_STREAMING_WRITABLE	0x0021
-+#define GC_FC_SECTOR_ERASABLE		0x0022
-+#define GC_FC_FORMATTABLE		0x0023
-+#define GC_FC_DEFECT_MANAGEMENT 	0x0024
-+#define GC_FC_WRITE_ONCE		0x0025
-+#define GC_FC_RESTRICTED_OVERWRITE	0x0026
-+#define GC_FC_CD_RW_CAV_WRITE		0x0027
-+#define GC_FC_MRW_SUPPORT		0x0028 /* feature name guessed */
-+#define GC_FC_DVD_READ_OPT_WRITE	0x002B /* feature name guessed */
-+#define GC_FC_RIGID_RESTRICTED_OVERWRITE 0x002C
-+#define GC_FC_CD_TRACK_AT_ONCE		0x002D
-+#define GC_FC_CD_MASTERING		0x002E
-+#define GC_FC_DVD_R_RW_WRITE		0x002F
-+#define GC_FC_POWER_MANAGEMENT		0x0100
-+#define GC_FC_SMART			0x0101
-+#define GC_FC_EMBEDDED_CHANGER		0x0102
-+#define GC_FC_CD_AUDIO_ANALOG_PLAY	0x0103
-+#define GC_FC_MICROCODE_UPGRADE 	0x0104
-+#define GC_FC_TIME_OUT 			0x0105
-+#define GC_FC_DVD_CSS			0x0106
-+#define GC_FC_REAL_TIME_STREAMING	0x0107
-+#define GC_FC_LOGICAL_UNIT_SERIAL_NUMBER 0x0108
-+#define GC_FC_DISC_CONTROL_BLOCKS	0x010A
-+#define GC_FC_DVD_CPRM			0x010B
 +	uint8_t reserved[3];
 +	uint8_t alloc_len[2];
 +	uint8_t control;
@@ -360,7 +325,6 @@ index f502d66..b2b2e1e 100644
 +	uint8_t data_len[4];
 +	uint8_t reserved[2];
 +	uint8_t cur_profile[2];
-+#define GC_FC_PROFILE_CDRW		0x000A
 +};
 +
 +struct scsi_get_conf_feature_inc_stream_write
@@ -368,7 +332,6 @@ index f502d66..b2b2e1e 100644
 +	uint8_t	feature_code[2];
 +	uint8_t	byte3;
 +#define GC_CURRENT			0x1
-+#define GC_PERSISTENT			0x2
 +	uint8_t	additional_len;
 +	uint8_t data_block_types_supported[2];
 +	uint8_t byte7;
@@ -414,9 +377,7 @@ index f502d66..b2b2e1e 100644
 +{
 +	uint8_t op_code;
 +	uint8_t byte2;
-+#define READ_TRACK_INFO_AT_LBA		0x00
 +#define READ_TRACK_INFO_AT_TRACK	0x01
-+#define READ_TRACK_INFO_AT_BORDER	0x02
 +	uint8_t address[4];
 +	uint8_t reserved;
 +	uint8_t alloc_len[2];
