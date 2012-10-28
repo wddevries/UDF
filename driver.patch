@@ -1,5 +1,5 @@
 diff --git sys/cam/scsi/scsi_cd.c sys/cam/scsi/scsi_cd.c
-index 7b24ddb..d8f8207 100644
+index d5d7156..8d772f3 100644
 --- sys/cam/scsi/scsi_cd.c
 +++ sys/cam/scsi/scsi_cd.c
 @@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
@@ -10,9 +10,9 @@ index 7b24ddb..d8f8207 100644
  #include <sys/devicestat.h>
  #include <sys/sysctl.h>
  #include <sys/taskqueue.h>
-@@ -282,6 +283,20 @@ static	int		cdsendkey(struct cam_periph *periph,
- static	int		cdreaddvdstructure(struct cam_periph *periph,
+@@ -287,6 +288,20 @@ static	int		cdreaddvdstructure(struct cam_periph *periph,
  					   struct dvd_struct *dvdstruct);
+ static timeout_t	cdmediapoll;
  
 +/* added for UDF */
 +static	int 		udfreaddiscinfo(struct cam_periph *periph, 
@@ -31,7 +31,7 @@ index 7b24ddb..d8f8207 100644
  static struct periph_driver cddriver =
  {
  	cdinit, "cd",
-@@ -2742,6 +2757,18 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
+@@ -2828,6 +2843,18 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
  
  		break;
  	}
@@ -50,7 +50,7 @@ index 7b24ddb..d8f8207 100644
  	default:
  		cam_periph_lock(periph);
  		error = cam_periph_ioctl(periph, cmd, addr, cderror);
-@@ -2761,6 +2788,247 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
+@@ -2847,6 +2874,247 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
  	return (error);
  }
  

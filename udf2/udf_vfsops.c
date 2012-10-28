@@ -475,13 +475,6 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	if (ump->session_end == 0)
 		ump->session_end = numsecs;
 
-	/* This is a hack. It should not happen, but does. */
-	if (ump->session_end > numsecs) {
-		printf("UDF mount: Adjusting end of disk size received from"
-		    "mount command\n");
-		ump->session_end = numsecs;
-	}
-
 	/* We should only need to search one, so this is also a hack. */
 	if (ump->session_end - ump->session_start > 25)
 		ump->first_possible_vat_location = ump->session_last_written -

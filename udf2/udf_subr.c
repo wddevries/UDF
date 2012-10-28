@@ -2986,8 +2986,11 @@ udf_search_vat(struct udf_mount *ump)
 					break;
 			}
 		}
-printf("VAT not found at last possible location\n");
-		vat_loc--;	/* walk backwards */
+
+		if (vat_loc == ump->last_possible_vat_location)
+			printf("VAT not found at last possible location\n");
+
+		vat_loc--;
 	} while (vat_loc >= early_vat_loc);
 
 	/* keep our VAT node around */
