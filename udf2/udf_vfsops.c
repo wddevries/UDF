@@ -307,7 +307,6 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	ump->vfs_mountp = mp;
 	ump->devvp = devvp;
 	ump->geomcp = cp;
-	ump->bo = &devvp->v_bufobj;
 
 	/* Load flags for later.  Not sure what to use them for... */
 	udf_flags = NULL;

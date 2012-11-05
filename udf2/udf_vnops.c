@@ -184,7 +184,7 @@ udf_bmap(struct vop_bmap_args *ap)
 	uint32_t maxblks;
 
 	if (ap->a_bop != NULL)
-		*ap->a_bop = udf_node->ump->bo;
+		*ap->a_bop = &udf_node->ump->devvp->v_bufobj;
 
 	if (ap->a_bnp == NULL)
 		return (0);
@@ -220,7 +220,7 @@ udf_strategy(struct vop_strategy_args *ap)
 	struct vnode *vp = ap->a_vp;
 	struct buf *bp = ap->a_bp;
 	struct udf_node *udf_node = VTOI(vp);
-	struct bufobj *bo = udf_node->ump->bo;
+	struct bufobj *bo = &udf_node->ump->devvp->v_bufobj;
 	uint64_t lsector;
 	int error, exttype;
 	uint32_t from, lb_size, sectors, maxblks;
