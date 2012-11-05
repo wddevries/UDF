@@ -79,9 +79,6 @@ udf_calc_freespace(struct udf_mount *ump, uint64_t *sizeblks,
 #if 0
 	}
 #endif
-	/* adjust for accounted uncommitted blocks */
-	for (vpart = 0; vpart < num_vpart; vpart++)
-		*freeblks -= ump->uncommitted_lbs[vpart];
 
 	if (*freeblks > UDF_DISC_SLACK)
 		*freeblks -= UDF_DISC_SLACK;
@@ -134,8 +131,7 @@ translate_again:
 			return (EINVAL);
 
 		/* lookup in virtual allocation table file */
-		error = udf_vat_read(ump->vat_node,
-		    (uint8_t *)&udf_rw32_lbmap, 4, 
+		error = udf_vat_read(ump, (uint8_t *)&udf_rw32_lbmap, 4, 
 		    ump->vat_offset + lb_num * 4);
 		if (error != 0)
 			return (error);

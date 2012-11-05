@@ -939,11 +939,9 @@ udf_update_lvid_from_vat_extattr(struct udf_node *vat_node)
 }
 
 int
-udf_vat_read(struct udf_node *vat_node, uint8_t *blob, int size, 
+udf_vat_read(struct udf_mount *ump, uint8_t *blob, int size, 
     uint32_t offset)
 {
-	struct udf_mount *ump = vat_node->ump;
-
 /*	mutex_enter(&ump->allocate_mutex); */
 	if (offset + size > ump->vat_offset + ump->vat_entries * 4)
 		return (EINVAL);
@@ -1114,11 +1112,6 @@ udf_search_vat(struct udf_mount *ump)
 
 	/* start looking from the end of the range */
 	do {
-		if (vat_node != NULL) {
-			udf_dispose_node(vat_node);
-			vat_node = NULL;
-		}
-
 		error = udf_read_phys_dscr(ump, vat_loc, M_UDFTEMP, &dscr);
 		if (!error && dscr) { /* dscr will be null if zeros were read */
 			tagid = le16toh(dscr->tag.id);
@@ -1137,9 +1130,16 @@ udf_search_vat(struct udf_mount *ump)
 				error = udf_get_node(ump, icb_loc, &vat_node);
 				if (error == 0)
 					error = udf_check_for_vat(vat_node);
-				if (error == 0)
+				if (error == 0) {
+					udf_dispose_node(vat_node);
 					break;
+				}
 			}
+		}
+
+		if (vat_node != NULL) {
+			udf_dispose_node(vat_node);
+			vat_node = NULL;
 		}
 
 		if (vat_loc == ump->last_possible_vat_location)
@@ -1147,9 +1147,6 @@ udf_search_vat(struct udf_mount *ump)
 
 		vat_loc--;
 	} while (vat_loc >= early_vat_loc);
-
-	/* keep our VAT node around */
-	ump->vat_node = vat_node;
 
 	return (error);
 }
@@ -1199,38 +1196,24 @@ udf_read_metadata_nodes(struct udf_mount *ump, union udf_pmap *mapping)
 	struct long_ad icb_loc;
 	int error = 0;
 
-	/* extract our allocation parameters set up on format */
-	ump->metadata_alloc_unit_size = le32toh(mapping->pmm.alloc_unit_size);
-	ump->metadata_alignment_unit_size = 
-	    le16toh(mapping->pmm.alignment_unit_size);
-	ump->metadata_flags = mapping->pmm.flags;
-
 	icb_loc.loc.part_num = pmm->part_num;
 	icb_loc.loc.lb_num = pmm->meta_file_lbn;
 	udf_get_node(ump, icb_loc, &ump->metadata_node);
 
-	icb_loc.loc.lb_num = pmm->meta_mirror_file_lbn;
-	if (icb_loc.loc.lb_num != -1)
-		udf_get_node(ump, icb_loc, &ump->metadatamirror_node);
-
-	icb_loc.loc.lb_num = pmm->meta_bitmap_file_lbn;
-	if (icb_loc.loc.lb_num != -1)
-		udf_get_node(ump, icb_loc, &ump->metadatabitmap_node);
-
-	/* if we're mounting read-only we relax the requirements */
-	error = EFAULT;
-
-	if (ump->metadata_node != NULL)
-		error = 0;
-
-	if (ump->metadata_node == NULL && ump->metadatamirror_node != NULL) {
-		printf( "udf mount: Metadata file not readable, "
-			"substituting Metadata copy file\n");
-		ump->metadata_node = ump->metadatamirror_node;
-		ump->metadatamirror_node = NULL;
-		error = 0;
+	if (ump->metadata_node == NULL) {
+		icb_loc.loc.lb_num = pmm->meta_mirror_file_lbn;
+		if (icb_loc.loc.lb_num != -1)
+			udf_get_node(ump, icb_loc, &ump->metadata_node);
+		
+		if (ump->metadata_node != NULL)
+			printf( "udf mount: Metadata file not readable, "
+				"substituting Metadata copy file\n");
 	}
 
+	/* if we're mounting read-only we relax the requirements */
+	if (ump->metadata_node == NULL)
+		error = EFAULT;
+	
 	return (error);
 }
 
@@ -1630,7 +1613,7 @@ udf_get_node(struct udf_mount *ump, struct long_ad icb_loc,
 	struct long_ad last_fe_icb_loc;
 	struct udf_node *udf_node;
 	uint64_t file_size;
-	int dscr_type, eof, error, needs_indirect, slot, strat, strat4096;
+	int dscr_type, eof, error, slot, strat, strat4096;
 	uint32_t dummy, lb_size, sector;
 	uint8_t  *file_data;
 
@@ -1643,17 +1626,12 @@ udf_get_node(struct udf_mount *ump, struct long_ad icb_loc,
 	udf_node = udf_alloc_node();
 	udf_node->ump = ump;
 	udf_node->loc = icb_loc;
-	udf_node->lockf = 0;
 /*	mutex_init(&udf_node->node_mutex, MUTEX_DEFAULT, IPL_NONE); */
 /*	cv_init(&udf_node->node_lock, "udf_nlk"); */
-	udf_node->outstanding_bufs = 0;
-	udf_node->outstanding_nodedscr = 0;
-	udf_node->uncommitted_lbs = 0;
 
 	/* safe to unlock, the entry is in the hash table, vnode is locked */
 /*	mutex_exit(&ump->get_node_lock); */
 
-	needs_indirect = 0;
 	strat4096 = 0;
 	file_size = 0;
 	file_data = NULL;
@@ -1679,7 +1657,6 @@ udf_get_node(struct udf_mount *ump, struct long_ad icb_loc,
 
 		/* if dealing with an indirect entry, follow the link */
 		if (dscr_type == TAGID_INDIRECTENTRY) {
-			needs_indirect = 0;
 			free(dscr, M_UDFTEMP);
 			icb_loc = dscr->inde.indirect_icb;
 			continue;
@@ -1724,8 +1701,6 @@ udf_get_node(struct udf_mount *ump, struct long_ad icb_loc,
 		 */
 		if (strat == 4096) {
 			strat4096 = 1;
-			needs_indirect = 1;
-
 			icb_loc.loc.lb_num = le32toh(icb_loc.loc.lb_num) + 1;
 		}
 
@@ -1748,18 +1723,6 @@ udf_get_node(struct udf_mount *ump, struct long_ad icb_loc,
 		udf_dispose_node(udf_node);
 		return (EINVAL);
 	}
-
-	/*
-	 * Remember where to record an updated version of the descriptor. If
-	 * there is a sequence of indirect entries, icb_loc will have been
-	 * updated. Its the write disipline to allocate new space and to make
-	 * sure the chain is maintained.
-	 *
-	 * `needs_indirect' flags if the next location is to be filled with
-	 * with an indirect entry.
-	 */
-	udf_node->write_loc = icb_loc;
-	udf_node->needs_indirect = needs_indirect;
 
 	/*
 	 * Go trough all allocations extents of this descriptor and when
@@ -1809,7 +1772,6 @@ udf_get_node(struct udf_mount *ump, struct long_ad icb_loc,
 		}
 
 		udf_node->ext[udf_node->num_extensions] = &dscr->aee;
-		udf_node->ext_loc[udf_node->num_extensions] = icb_loc;
 
 		udf_node->num_extensions++;
 

@@ -67,7 +67,7 @@ void	udf_get_adslot(struct udf_node *udf_node, int slot, struct long_ad *icb,
 int	udf_append_adslot(struct udf_node *udf_node, int *slot,
 	    struct long_ad *icb);
 
-int	udf_vat_read(struct udf_node *vat_node, uint8_t *blob, int size,
+int	udf_vat_read(struct udf_mount *ump, uint8_t *blob, int size,
 	    uint32_t offset);
 
 /* disc allocation */

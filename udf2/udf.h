@@ -87,7 +87,7 @@ struct udf_lvintq {
 struct udf_mount {
 	struct mount		*vfs_mountp;
 	struct vnode		*devvp;	
-	struct cdev		*dev;
+//struct cdev		*dev;
 	struct g_consumer	*geomcp;
 	struct bufobj		*bo; 
 	uint32_t		 sector_size;
@@ -105,7 +105,6 @@ struct udf_mount {
 	uint32_t		 session_last_written;
 
 	/* format descriptors */
-/*	kmutex_t		 logvol_mutex; */  /* Who needs locks... */
 	struct anchor_vdp	*anchors[UDF_ANCHORS];	/* anchors to VDS    */
 	struct pri_vol_desc	*primary_vol;		/* identification    */
 	struct logvol_desc	*logical_vol;		/* main mapping v->p */
@@ -130,28 +129,13 @@ struct udf_mount {
 	uint32_t		 vat_offset;		/* offset in table   */
 	uint32_t		 vat_table_alloc_len;
 	uint8_t			*vat_table;
-	struct udf_node		*vat_node;		/* system node       */
-
-	/* space bitmaps for physical partitions */
-	struct space_bitmap_desc *part_unalloc_dscr[UDF_PARTITIONS];
-	struct space_bitmap_desc *part_freed_dscr  [UDF_PARTITIONS];
 
 	/* sparable */
 	uint32_t		 sparable_packet_size;
-	uint32_t		 packet_size;
 	struct udf_sparing_table *sparing_table;
 
 	/* meta */
 	struct udf_node 	*metadata_node;		/* system node       */
-	struct udf_node 	*metadatamirror_node;	/* system node       */
-	struct udf_node 	*metadatabitmap_node;	/* system node       */
-	struct space_bitmap_desc *metadata_unalloc_dscr;
-	uint32_t		 metadata_alloc_unit_size;
-	uint16_t		 metadata_alignment_unit_size;
-	uint8_t			 metadata_flags;
-
-	/* late allocation */
-	int32_t			 uncommitted_lbs[UDF_PARTITIONS];
 };
 
 /*
@@ -160,14 +144,11 @@ struct udf_mount {
  * BUGALERT claim node_mutex before reading/writing to prevent inconsistencies !
  */
 struct udf_node {
-/*	struct genfs_node	i_gnode; */		/* has to be first   */
 	struct vnode		*vnode;			/* vnode associated  */
 	struct udf_mount	*ump;
 
 	ino_t			 hash_id;		/* should contain inode */
 	int			 diroff;		/* used in lookup */
-	char const		*lock_fname;
-	int			 lock_lineno;
 
 	/* one of `fe' or `efe' can be set, not both (UDF file entry dscr.)  */
 	struct file_entry	*fe;
@@ -177,15 +158,6 @@ struct udf_node {
 
 	/* location found, recording location & hints */
 	struct long_ad		 loc;			/* FID/hash loc.     */
-	struct long_ad		 write_loc;		/* strat 4096 loc    */
-	int			 needs_indirect;	/* has missing indr. */
-	struct long_ad		 ext_loc[UDF_MAX_ALLOC_EXTENTS];
-
-	/* misc */
-	struct lockf		*lockf;			/* lock list         */
-	uint32_t		 outstanding_bufs;	/* file data         */
-	uint32_t		 outstanding_nodedscr;	/* node dscr         */
-	int32_t			 uncommitted_lbs;	/* in UBC            */
 };
 
 struct udf_fid {

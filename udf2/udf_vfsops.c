@@ -121,17 +121,9 @@ free_udf_mountinfo(struct mount *mp)
 
 	ump = VFSTOUDF(mp);
 	if (ump != NULL) {
-		/* VAT partition support */
-		if (ump->vat_node != NULL)
-			udf_dispose_node(ump->vat_node);
-
 		/* Metadata partition support */
 		if (ump->metadata_node != NULL)
 			udf_dispose_node(ump->metadata_node);
-		if (ump->metadatamirror_node != NULL)
-			udf_dispose_node(ump->metadatamirror_node);
-		if (ump->metadatabitmap_node != NULL)
-			udf_dispose_node(ump->metadatabitmap_node);
 
 		/* clear our data */
 		for (i = 0; i < UDF_ANCHORS; i++)
@@ -143,10 +135,7 @@ free_udf_mountinfo(struct mount *mp)
 		MPFREE(ump->logvol_integrity, M_UDFTEMP);
 		for (i = 0; i < UDF_PARTITIONS; i++) {
 			MPFREE(ump->partitions[i], M_UDFTEMP);
-			MPFREE(ump->part_unalloc_dscr[i], M_UDFTEMP);
-			MPFREE(ump->part_freed_dscr[i], M_UDFTEMP);
 		}
-		MPFREE(ump->metadata_unalloc_dscr, M_UDFTEMP);
 		MPFREE(ump->fileset_desc, M_UDFTEMP);
 		MPFREE(ump->sparing_table, M_UDFTEMP);
 		MPFREE(ump->vat_table, M_UDFTEMP);
