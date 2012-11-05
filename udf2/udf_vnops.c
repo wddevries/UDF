@@ -671,7 +671,7 @@ udf_getattr(struct vop_getattr_args *ap)
 	vap->va_nlink = nlink;
 	vap->va_uid = uid;
 	vap->va_gid = gid;
-	vap->va_fsid = dev2udev(ump->dev);
+	vap->va_fsid = dev2udev(ump->devvp->v_rdev);
 	vap->va_fileid = udf_node->hash_id;
 	vap->va_size = filesize;
 	vap->va_blocksize = ump->sector_size; /* wise? */
@@ -1013,7 +1013,7 @@ udf_print(struct vop_print_args *ap)
 	struct udf_node *udf_node = VTOI(vp);
 
 	printf("    ino %u, on dev %s", (uint32_t)udf_node->hash_id,
-	    devtoname(udf_node->ump->dev));
+	    devtoname(udf_node->ump->devvp->v_rdev));
 	if (vp->v_type == VFIFO)
 		fifo_printinfo(vp);
 	printf("\n");

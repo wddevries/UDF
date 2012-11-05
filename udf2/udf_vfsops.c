@@ -239,7 +239,7 @@ udf_unmount(struct mount *mp, int mntflags)
 	g_topology_unlock();
 	PICKUP_GIANT();
 	vrele(ump->devvp);
-	dev_rel(ump->dev);
+	dev_rel(ump->devvp->v_rdev);
 
 	/* free our ump */
 	free_udf_mountinfo(mp);
@@ -260,7 +260,6 @@ static int
 udf_mountfs(struct vnode *devvp, struct mount *mp)
 {
 	struct g_consumer *cp;
-	struct cdev *dev;
 	struct udf_mount *ump = NULL;
 	int error, len, num_anchors, *udf_flags;
 	uint32_t bshift, logvol_integrity, numsecs; /*lb_size,*/
@@ -268,8 +267,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	void *optdata;
 
 	/* Open a consumer. */
-	dev = devvp->v_rdev;
-	dev_ref(dev);
+	dev_ref(devvp->v_rdev);
 	DROP_GIANT();
 	g_topology_lock();
 	error = g_vfs_open(devvp, &cp, "udf2", 0);
@@ -308,7 +306,6 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	mp->mnt_data = ump;
 	ump->vfs_mountp = mp;
 	ump->devvp = devvp;
-	ump->dev = dev;
 	ump->geomcp = cp;
 	ump->bo = &devvp->v_bufobj;
 
@@ -464,7 +461,7 @@ fail:
 		g_topology_unlock();
 		PICKUP_GIANT();
 	}
-	dev_rel(dev);
+	dev_rel(devvp->v_rdev);
 	if (ump != NULL)
 		free_udf_mountinfo(mp);
 

@@ -87,7 +87,6 @@ struct udf_lvintq {
 struct udf_mount {
 	struct mount		*vfs_mountp;
 	struct vnode		*devvp;	
-//struct cdev		*dev;
 	struct g_consumer	*geomcp;
 	struct bufobj		*bo; 
 	uint32_t		 sector_size;
