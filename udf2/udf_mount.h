@@ -62,9 +62,6 @@ struct udf_args {
 
 
 /* udf mount options */
-
-//#define UDFMNT_CLOSESESSION	0x00000001	/* close session on dismount */
-//#define UDFMNT_BITS "\20\1CLOSESESSION"
 #define UDFMNT_KICONV 100
 
 #endif /* !_FS_UDF_UDF_MOUNT_H_ */

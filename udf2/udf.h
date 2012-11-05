@@ -29,14 +29,6 @@
 
 #include "udf_osta.h"
 
-/* lets see debug stuff for now */
-#define DEBUG
-
-
-/* undefine UDF_COMPLETE_DELETE to need `purge'; but purge is not implemented */
-#define UDF_COMPLETE_DELETE
-
-
 /* constants to identify what kind of identifier we are dealing with */
 #define UDF_REGID_DOMAIN		 1
 #define UDF_REGID_UDF			 2
@@ -44,41 +36,18 @@
 #define UDF_REGID_APPLICATION		 4
 #define UDF_REGID_NAME			99
 
-
-/* DON'T change these: they identify 13thmonkey's UDF implementation */
-#define APP_NAME		"*NetBSD UDF"
-#define APP_VERSION_MAIN	0
-#define APP_VERSION_SUB		5
-#define IMPL_NAME		"*NetBSD kernel UDF"
-
-
 /* Configuration values */
-#if 0
-#define UDF_ECCBUF_HASHBITS	10
-#define UDF_ECCBUF_HASHSIZE	(1<<UDF_ECCBUF_HASHBITS)
-#define UDF_ECCBUF_HASHMASK	(UDF_ECCBUF_HASHSIZE -1)
-
-#define UDF_ECCLINE_MAXFREE	5			/* picked, needs calculation */
-#define UDF_ECCLINE_MAXBUSY	100			/* picked, needs calculation */
-
-#define UDF_MAX_MAPPINGS	(MAXPHYS/DEV_BSIZE)	/* 128 */
-#endif
 #define UDF_VAT_ALLOC_LIMIT	104857600		/* picked at random */
 #define UDF_VAT_CHUNKSIZE	(64*1024)		/* picked */
 #define UDF_SYMLINKBUFLEN	(64*1024)		/* picked */
 
 #define UDF_DISC_SLACK		(128)			/* picked, at least 64 kb or 128 */
-#define UDF_ISO_VRS_SIZE	(32*2048)		/* 32 ISO `sectors' */
-
 
 /* structure space */
 #define UDF_ANCHORS		4	/* 256, 512, N-256, N */
 #define UDF_PARTITIONS		4	/* overkill */
 #define UDF_PMAPS		5	/* overkill */
-#define UDF_LVDINT_SEGMENTS	100	/* big overkill */
-#define UDF_LVINT_LOSSAGE	4	/* lose 2 openings */
 #define UDF_MAX_ALLOC_EXTENTS	50	/* overkill */
-
 
 /* constants */
 #define UDF_MAX_NAMELEN		255	/* as per SPEC */
@@ -86,21 +55,8 @@
 #define UDF_TRAN_INTERN		1
 #define UDF_TRAN_ZERO		2
 
-
 /* RW content hint for allocation and other purposes */
-#define UDF_C_ABSOLUTE		 0	/* blob to write at absolute */
-#define UDF_C_PROCESSED		 0	/* not relevant */
-#define UDF_C_USERDATA		 1	/* all but userdata is metadata */
 #define UDF_C_DSCR		 2	/* update sectornr and CRC */
-#define UDF_C_FLOAT_DSCR	 3	/* update sectornr and CRC; sequential */
-#define UDF_C_NODE		 4	/* file/dir node, update sectornr and CRC */
-#define UDF_C_FIDS		 5	/* update all contained fids */
-#define UDF_C_METADATA_SBM	 6	/* space bitmap, update sectornr and CRC */
-#define UDF_C_EXTATTRS		 7	/* dunno what to do yet */
-
-/* use unused b_freelistindex for our UDF_C_TYPE */
-#define b_udf_c_type	b_freelistindex
-
 
 /* virtual to physical mapping types */
 #define UDF_VTOP_RAWPART UDF_PMAPS	/* [0..UDF_PMAPS> are normal     */
@@ -112,42 +68,14 @@
 #define UDF_VTOP_TYPE_SPARABLE       3
 #define UDF_VTOP_TYPE_META           4
 
-
-/* allocation strategies */
-#define UDF_ALLOC_INVALID            0
-#define UDF_ALLOC_SEQUENTIAL         1  /* linear on NWA                 */
-#define UDF_ALLOC_VAT                2  /* VAT handling                  */
-#define UDF_ALLOC_SPACEMAP           3  /* spacemaps                     */
-#define UDF_ALLOC_METABITMAP         4  /* metadata bitmap               */
-#define UDF_ALLOC_METASEQUENTIAL     5  /* in chunks seq., nodes not seq */
-#define UDF_ALLOC_RELAXEDSEQUENTIAL  6  /* only nodes not seq.           */
-
-
-/* logical volume open/close actions */
-#define UDF_OPEN_SESSION	  0x01  /* if needed writeout VRS + VDS	     */
-#define UDF_CLOSE_SESSION	  0x02	/* close session after writing VAT   */
-#define UDF_FINALISE_DISC	  0x04	/* close session after writing VAT   */
-#define UDF_WRITE_VAT		  0x08	/* sequential VAT filesystem         */
-#define UDF_WRITE_LVINT		  0x10	/* write out open lvint              */
-#define UDF_WRITE_PART_BITMAPS	  0x20	/* write out partition space bitmaps */
-#define UDF_APPENDONLY_LVINT	  0x40	/* no shifting, only appending       */
-#define UDF_WRITE_METAPART_NODES  0x80	/* write out metadata partition nodes*/
-#define UDFLOGVOL_BITS "\20\1OPEN_SESSION\2CLOSE_SESSION\3FINALISE_DISC" \
-			"\4WRITE_VAT\5WRITE_LVINT\6WRITE_PART_BITMAPS" \
-			"\7APPENDONLY_LVINT\10WRITE_METAPART_NODES"
-
 /* logical volume error handling actions */
 #define UDF_UPDATE_TRACKINFO	  0x01	/* update trackinfo and re-shedule   */
 #define UDF_REMAP_BLOCK		  0x02	/* remap the failing block length    */
-#define UDFONERROR_BITS "\20\1UPDATE_TRACKINFO\2REMAP_BLOCK"
 
 /* malloc pools */
 MALLOC_DECLARE(M_UDFTEMP);
 
-//struct pool udf_node_pool;
 struct udf_node;
-//struct udf_strategy;
-
 
 struct udf_lvintq {
 	uint32_t		start;
@@ -156,66 +84,19 @@ struct udf_lvintq {
 	uint32_t		wpos;
 };
 
-
-struct udf_bitmap {
-	uint8_t			*blob;			/* allocated         */
-	uint8_t			*bits;			/* bits themselves   */
-	uint8_t			*pages;			/* dirty pages       */
-	uint32_t		 max_offset;		/* in bits           */
-	uint32_t		 data_pos;		/* position in data  */
-	uint32_t		 metadata_pos;		/* .. in metadata    */
-};
-
-#if 0
-struct udf_strat_args {
-	struct udf_mount *ump;
-	struct udf_node  *udf_node;
-	struct long_ad   *icb;
-	union dscrptr    *dscr;
-	struct buf       *nestbuf;
-/*	kauth_cred_t	  cred;  */  /* Not ever used? */
-	int waitfor;
-};
-
-struct udf_strategy {
-	int  (*create_logvol_dscr)  (struct udf_strat_args *args);
-	void (*free_logvol_dscr)    (struct udf_strat_args *args);
-	int  (*read_logvol_dscr)    (struct udf_strat_args *args);
-	int  (*write_logvol_dscr)   (struct udf_strat_args *args);
-	void (*queuebuf)	    (struct udf_strat_args *args);
-	void (*discstrat_init)      (struct udf_strat_args *args);
-	void (*discstrat_finish)    (struct udf_strat_args *args);
-};
-#endif
-
-//extern struct udf_strategy udf_strat_bootstrap;
-//extern struct udf_strategy udf_strat_sequential;
-//extern struct udf_strategy udf_strat_direct;
-//extern struct udf_strategy udf_strat_rmw;
-//extern struct udf_strategy udf_strat_readonly;
-
-
-/* pre cleanup */
 struct udf_mount {
 	struct mount		*vfs_mountp;
 	struct vnode		*devvp;	
 	struct cdev		*dev;
 	struct g_consumer	*geomcp;
 	struct bufobj		*bo; 
-/*	struct mmc_discinfo	 discinfo; */
 	uint32_t		 sector_size;
-//	struct udf_args		 mount_args;
 	int			 flags;
 	uid_t			 anon_uid;
 	gid_t			 anon_gid;
 	uid_t			 nobody_uid;
 	gid_t			 nobody_gid;
-
-	/* iconv */
 	void			*iconv_d2l;		/* disk to local */
-#if 0 
-	void			*iconv_l2d;		/* local to disk */
-#endif
 
 	/* Used in mounting */
 	uint32_t		 first_trackblank;
@@ -238,44 +119,22 @@ struct udf_mount {
 	/* fileset and root directories */
 	struct fileset_desc	*fileset_desc;		/* normally one      */
 
-	/* tracing logvol integrity history */
-	struct udf_lvintq	 lvint_trace[UDF_LVDINT_SEGMENTS];
-//	int			 lvopen;		/* logvol actions    */
-//	int			 lvclose;		/* logvol actions    */
-
 	/* logical to physical translations */
 	int 			 vtop[UDF_PMAPS+1];	/* vpartnr trans     */
 	int			 vtop_tp[UDF_PMAPS+1];	/* type of trans     */
-
-	/* disc allocation / writing method */
-/*	kmutex_t		 allocate_mutex; */
-	int			 lvreadwrite;		/* error handling    */
-	int			 vtop_alloc[UDF_PMAPS+1]; /* alloc scheme    */
-	int			 data_part;
-	int			 node_part;
-	int			 fids_part;
-
-	/* sequential track info */
-/*	struct mmc_trackinfo	 data_track;
-	struct mmc_trackinfo	 metadata_track; */
 
 	/* VAT */
 	uint32_t		 first_possible_vat_location;
 	uint32_t		 last_possible_vat_location;
 	uint32_t		 vat_entries;
 	uint32_t		 vat_offset;		/* offset in table   */
-	uint32_t		 vat_last_free_lb;	/* last free lb_num  */
-	uint32_t		 vat_table_len;
 	uint32_t		 vat_table_alloc_len;
 	uint8_t			*vat_table;
-//	uint8_t			*vat_pages;		/* TODO */
 	struct udf_node		*vat_node;		/* system node       */
 
 	/* space bitmaps for physical partitions */
 	struct space_bitmap_desc *part_unalloc_dscr[UDF_PARTITIONS];
 	struct space_bitmap_desc *part_freed_dscr  [UDF_PARTITIONS];
-//	struct udf_bitmap	 part_unalloc_bits[UDF_PARTITIONS];
-//	struct udf_bitmap	 part_freed_bits  [UDF_PARTITIONS];
 
 	/* sparable */
 	uint32_t		 sparable_packet_size;
@@ -287,39 +146,13 @@ struct udf_mount {
 	struct udf_node 	*metadatamirror_node;	/* system node       */
 	struct udf_node 	*metadatabitmap_node;	/* system node       */
 	struct space_bitmap_desc *metadata_unalloc_dscr;
-//	struct udf_bitmap	 metadata_unalloc_bits;
 	uint32_t		 metadata_alloc_unit_size;
 	uint16_t		 metadata_alignment_unit_size;
 	uint8_t			 metadata_flags;
 
-	/* rb tree for lookup icb to udf_node and sorted list for sync */
-/*	kmutex_t	ihash_lock;
-	kmutex_t	get_node_lock; */
-/*	struct rb_tree	udf_node_tree; */
-
-	/* syncing */
-//	int		syncing;			/* are we syncing?   */
-/*	kcondvar_t 	dirtynodes_cv; */		/* sleeping on sync  */
-
 	/* late allocation */
 	int32_t			 uncommitted_lbs[UDF_PARTITIONS];
-//	struct long_ad		*la_node_ad_cpy;		/* issue buf */
-//	uint64_t		*la_lmapping, *la_pmapping;	/* issue buf */
-
-	/* lists */
-//	STAILQ_HEAD(udfmntpts, udf_mount) all_udf_mntpnts;
-
-	/* device strategy */
-//	struct udf_strategy	*strategy;
-//	void			*strategy_private;
 };
-
-#if 0
-#define RBTOUDFNODE(node) \
-	((node) ? \
-	 (void *)((uintptr_t)(node) - offsetof(struct udf_node, rbnode)) \
-	 : NULL)
-#endif
 
 /*
  * UDF node describing a file/directory.
@@ -333,13 +166,8 @@ struct udf_node {
 
 	ino_t			 hash_id;		/* should contain inode */
 	int			 diroff;		/* used in lookup */
-/*	kmutex_t		 node_mutex;
-	kcondvar_t		 node_lock; */		/* sleeping lock */
 	char const		*lock_fname;
 	int			 lock_lineno;
-
-	/* rb_node for fast lookup and fast sequential visiting */
-/*	struct rb_node		 rbnode; */
 
 	/* one of `fe' or `efe' can be set, not both (UDF file entry dscr.)  */
 	struct file_entry	*fe;
@@ -353,41 +181,12 @@ struct udf_node {
 	int			 needs_indirect;	/* has missing indr. */
 	struct long_ad		 ext_loc[UDF_MAX_ALLOC_EXTENTS];
 
-//	struct dirhash		*dir_hash;
-
 	/* misc */
-//	uint32_t		 i_flags;		/* associated flags  */
 	struct lockf		*lockf;			/* lock list         */
 	uint32_t		 outstanding_bufs;	/* file data         */
 	uint32_t		 outstanding_nodedscr;	/* node dscr         */
 	int32_t			 uncommitted_lbs;	/* in UBC            */
-
-	/* references to associated nodes */
-//	struct udf_node		*extattr;
-//	struct udf_node		*streamdir;
-//	struct udf_node		*my_parent;		/* if extended attr. */
 };
-
-
-/* misc. flags stored in i_flags (XXX needs cleaning up) */
-#define	IN_ACCESS		0x0001	/* Inode access time update request  */
-#define	IN_CHANGE		0x0002	/* Inode change time update request  */
-#define	IN_UPDATE		0x0004	/* Inode was written to; update mtime*/
-#define	IN_MODIFY		0x0008	/* Modification time update request  */
-#define	IN_MODIFIED		0x0010	/* node has been modified */
-#define	IN_ACCESSED		0x0020	/* node has been accessed */
-#define	IN_RENAME		0x0040	/* node is being renamed. XXX ?? */
-#define	IN_DELETED		0x0080	/* node is unlinked, no FID reference*/
-#define	IN_LOCKED		0x0100	/* node is locked by condvar */
-#define	IN_SYNCED		0x0200	/* node is being used by sync */
-#define	IN_CALLBACK_ULK		0x0400	/* node will be unlocked by callback */
-#define	IN_NODE_REBUILD		0x0800	/* node is rebuild */
-
-
-#define IN_FLAGBITS \
-	"\10\1IN_ACCESS\2IN_CHANGE\3IN_UPDATE\4IN_MODIFY\5IN_MODIFIED" \
-	"\6IN_ACCESSED\7IN_RENAME\10IN_DELETED\11IN_LOCKED\12IN_SYNCED" \
-	"\13IN_CALLBACK_ULK\14IN_NODE_REBUILD"
 
 struct udf_fid {
 	u_short		len;		/* length of data in bytes */
