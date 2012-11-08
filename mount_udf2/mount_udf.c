@@ -52,6 +52,7 @@
 #include <sys/endian.h>
 #include <sys/ioctl.h>
 #include <sys/udfio.h>
+#include <sys/types.h>
 
 #include <err.h>
 #include <errno.h>
@@ -61,6 +62,7 @@
 #include <sysexits.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <pwd.h>
 
 #include "mntopts.h"
 #include "../udf2/udf_mount.h"
@@ -82,23 +84,37 @@ int
 main(int argc, char **argv)
 {
 	struct udf_session_info usi;
-	struct iovec iov[20];
+	struct iovec iov[24];
+	struct passwd *nobody;
 	long session_num;
+	gid_t gid;
 	int ch, i, mntflags, opts, sessioninfo, udf_flags, verbose;
+	int nobody_gid, nobody_uid;
 	int32_t first_trackblank;
+	uid_t uid;
 	char *cs_disk, *cs_local, *dev, *dir, *endp, mntpath[MAXPATHLEN];
 
 	session_num = 0;
 	sessioninfo = 0;
+	gid = 0;
+	uid = 0;
+	nobody_uid = 1;
+	nobody_gid = 1;
 
 	i = mntflags = opts = udf_flags = verbose = 0;
 	cs_disk = cs_local = NULL;
-	while ((ch = getopt(argc, argv, "o:vC:s:p")) != -1)
+	while ((ch = getopt(argc, argv, "C:G:o:ps:U:v")) != -1)
 		switch (ch) {
 		case 'C':
 			if (set_charset(&cs_disk, &cs_local, optarg) == -1)
 				err(EX_OSERR, "udf2_iconv");
 			udf_flags |= UDFMNT_KICONV;
+			break;
+		case 'G':
+			gid = strtol(optarg, &endp, 10);
+			if (optarg == endp || *endp != '\0')
+				usage();	
+			nobody_gid = 1;
 			break;
 		case 'o':
 			getmntopts(optarg, mopts, &mntflags, &opts);
@@ -110,6 +126,12 @@ main(int argc, char **argv)
 			session_num = strtol(optarg, &endp, 10);
 			if (optarg == endp || *endp != '\0')
 				usage();	
+			break;
+		case 'U':
+			uid = strtol(optarg, &endp, 10);
+			if (optarg == endp || *endp != '\0')
+				usage();	
+			nobody_uid = 1;
 			break;
 		case 'v':
 			verbose++;
@@ -146,6 +168,22 @@ main(int argc, char **argv)
 	 */
 	get_session_info(dev, &usi, session_num);
 
+
+	/*
+	 * Use nobody for uid and gid if not given above. 
+	 */
+	if (nobody_gid == 1 || nobody_uid == 1) {
+		nobody = getpwnam("nobody");
+		if (nobody == NULL)
+			errx(EX_USAGE, "There is no entry for 'nobody'. Please "
+			    "use the G and U options to specify defaults for "
+			    "uid and gid.");
+	}
+	if (nobody_gid == 1)
+		gid = nobody->pw_gid;
+	if (nobody_uid == 1)
+		uid = nobody->pw_uid;
+
 	/*
 	 * UDF file systems are not writeable.
 	 */
@@ -171,6 +209,16 @@ main(int argc, char **argv)
 	iov[i++].iov_len = sizeof("flags");
 	iov[i].iov_base = &udf_flags;
 	iov[i++].iov_len = sizeof(udf_flags);
+
+	iov[i].iov_base = "anon_uid";
+	iov[i++].iov_len = sizeof("anon_uid");
+	iov[i].iov_base = &uid;
+	iov[i++].iov_len = sizeof(uid);
+
+	iov[i].iov_base = "anon_gid";
+	iov[i++].iov_len = sizeof("anon_gid");
+	iov[i].iov_base = &gid;
+	iov[i++].iov_len = sizeof(gid);
 
 	iov[i].iov_base = "first_trackblank";
 	iov[i++].iov_len = sizeof("first_trackblank");
@@ -291,8 +339,8 @@ static void
 usage(void)
 {
 
-	(void)fprintf(stderr, "usage: mount_udf [-v] [-C charset] [-o options]"
-	    " [-s session] special node\n");
+	(void)fprintf(stderr, "usage: mount_udf [-v] [-C charset] [-G gid] "
+	    "[-o options] [-s session] [-U uid] special node\n");
 	(void)fprintf(stderr, "usage: mount_udf [-p] [-s session] special\n");
 	exit(EX_USAGE);
 }

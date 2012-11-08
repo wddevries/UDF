@@ -53,6 +53,13 @@ to the global file system namespace at the location indicated by
 .Pp
 The options are as follows:
 .Bl -tag -width indent
+.It Fl C Ar charset
+Specify local
+.It Fl G Ar gid
+Set the group of anonymous files on the file system.  The default group is the
+nobody group.
+.Ar charset
+to convert Unicode file names.
 .It Fl o
 Options are specified with a
 .Fl o
@@ -61,12 +68,10 @@ See the
 .Xr mount 8
 man page for possible options and their meanings.
 The following UDF specific options are available:
-.It Fl v
-Be verbose about mounting the UDF file system.
-.It Fl C Ar charset
-Specify local
-.Ar charset
-to convert Unicode file names.
+.It Fl p
+Print information about sessions on cd.  This option may be used to determine
+the number of sessions on the disk.  Sessions are numbered starting with 1, and
+by default information will be displayed for the largest non-empty session.
 .It Fl s Ar session
 Specify the 
 .Ar session
@@ -75,10 +80,11 @@ This must be a positive integer greater than zero.  Valid values may be
 determined using the
 .Fl p
 option.
-.It Fl p
-Print information about sessions on cd.  This option may be used to determine
-the number of sessions on the disk.  Sessions are numbered starting with 1, and
-by default information will be displayed for the largest non-empty session.
+.It Fl U Ar uid
+Set the owner of anonymous files on the file system.  The default owner is the
+user nobody.
+.It Fl v
+Be verbose about mounting the UDF file system.
 .El
 .Sh SEE ALSO
 .Xr cdcontrol 1 ,

@@ -17,4 +17,7 @@ NO_SHARED?=	NO
 
 BINDIR=/sbin
 
+CFLAGS+=-g
+CXXFLAGS+=-g
+
 .include <bsd.prog.mk>

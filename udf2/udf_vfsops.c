@@ -261,10 +261,10 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 {
 	struct g_consumer *cp;
 	struct udf_mount *ump = NULL;
-	int error, len, num_anchors, *udf_flags;
+	int error, len, num_anchors, *udf_flags = NULL;
 	uint32_t bshift, logvol_integrity, numsecs; /*lb_size,*/
 	char *cs_disk, *cs_local;
-	void *optdata;
+	void *optdata = NULL;
 
 	/* Open a consumer. */
 	dev_ref(devvp->v_rdev);
@@ -308,20 +308,28 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	ump->devvp = devvp;
 	ump->geomcp = cp;
 
-	/* Load flags for later.  Not sure what to use them for... */
-	udf_flags = NULL;
+	/* read in options */
 	error = vfs_getopt(mp->mnt_optnew, "flags", (void **)&udf_flags, &len);
-	if (error != 0 || len != sizeof(int))
-		return (EINVAL);
+	if (error != 0 || len != sizeof(int)) {
+		error = EINVAL;
+		goto fail;
+	}
 	ump->flags = *udf_flags;
 	
-	/* read in disk info from options */
-	ump->anon_uid = 0;
-	ump->anon_gid = 0;
-	ump->nobody_uid = -1;
-	ump->nobody_gid = -1;
+	error = vfs_getopt(mp->mnt_optnew, "anon_uid", &optdata, &len);
+	if (error != 0 || len != sizeof(int)) {
+		error = EINVAL;
+		goto fail;
+	}
+	ump->anon_uid = *(uid_t *)optdata;
 
-	optdata = NULL;
+	error = vfs_getopt(mp->mnt_optnew, "anon_gid", &optdata, &len);
+	if (error != 0 || len != sizeof(int)) {
+		error = EINVAL;
+		goto fail;
+	}
+	ump->anon_gid = *(gid_t *)optdata;
+
 	error = vfs_getopt(mp->mnt_optnew, "first_trackblank", &optdata, &len);
 	if (error != 0 || len != sizeof(uint8_t)) {
 		error = EINVAL;
@@ -329,7 +337,6 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	}
 	ump->first_trackblank = *(uint8_t *)optdata;
 	
-	optdata = NULL;
 	error = vfs_getopt(mp->mnt_optnew, "session_start_addr", &optdata,
 	    &len);
 	if (error != 0 || len != sizeof(uint32_t)) {
@@ -338,7 +345,6 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	}
 	ump->session_start = *(uint32_t *)optdata;
 
-	optdata = NULL;
 	error = vfs_getopt(mp->mnt_optnew, "session_end_addr", &optdata, &len);
 	if (error != 0 || len != sizeof(uint32_t)) {
 		error = EINVAL;
@@ -346,8 +352,8 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	}
 	ump->session_end = *(uint32_t *)optdata;
 
-	optdata = NULL;
-	error = vfs_getopt(mp->mnt_optnew, "session_last_written", &optdata, &len);
+	error = vfs_getopt(mp->mnt_optnew, "session_last_written", &optdata,
+	    &len);
 	if (error != 0 || len != sizeof(uint32_t)) {
 		error = EINVAL;
 		goto fail;

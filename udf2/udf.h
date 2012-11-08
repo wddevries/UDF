@@ -92,8 +92,6 @@ struct udf_mount {
 	int			 flags;
 	uid_t			 anon_uid;
 	gid_t			 anon_gid;
-	uid_t			 nobody_uid;
-	gid_t			 nobody_gid;
 	void			*iconv_d2l;		/* disk to local */
 
 	/* Used in mounting */
