@@ -1381,11 +1381,13 @@ udf_read_rootdirs(struct udf_mount *ump)
 
 	/* release the vnodes again; they'll be auto-recycled later */
 	if (streamdir_node != NULL) {
+		/* This is not used later. */
 		vgone(streamdir_node);
 		vput(streamdir_node);
 	}
 	if (rootdir_node != NULL) {
-		vgone(rootdir_node);
+		if (error != 0)
+			vgone(rootdir_node);
 		vput(rootdir_node);
 	}
 
