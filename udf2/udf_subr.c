@@ -573,7 +573,7 @@ udf_process_vds(struct udf_mount *ump) {
 	/* check domain name */
 	domain_name = ump->logical_vol->domain_id.id;
 	if (strncmp(domain_name, "*OSTA UDF Compliant", 20)) {
-		printf("mount_udf: disc not OSTA UDF Compliant, aborting\n");
+		printf("UDF mount: disc not OSTA UDF Compliant, aborting\n");
 		return (EINVAL);
 	}
 
@@ -643,7 +643,8 @@ udf_process_vds(struct udf_mount *ump) {
 			}
 			check_name = "*UDF Metadata Partition";
 			if (strncmp(map_name, check_name, len) == 0) {
-printf("*UDF Metadata Partition\n");
+printf("UDF: UDF Metadata Partition loaded. (This is a debugging statement, not"
+    "an error)\n");
 				pmap_type = UDF_VTOP_TYPE_META;
 				n_meta++;
 				break;
@@ -1004,8 +1005,8 @@ udf_check_for_vat(struct udf_node *vat_node)
 			* UDF_VAT_CHUNKSIZE;
 
 	if (vat_table_alloc_len > UDF_VAT_ALLOC_LIMIT) {
-		printf("Allocation of %d bytes failed for VAT; length exceeded"
-		    " implementation limit.\n", vat_table_alloc_len);
+		printf("UDF mount: VAT table length of %d bytes exceeds "
+		    "implementation limit.\n", vat_table_alloc_len);
 		return (ENOMEM);
 	}
 	vat_table = malloc(vat_table_alloc_len, M_UDFTEMP, M_WAITOK); 
@@ -1070,8 +1071,8 @@ udf_check_for_vat(struct udf_node *vat_node)
 	/* read in complete VAT file */
 	error = udf_read_node(vat_node, vat_table, 0, vat_length);
 	if (error != 0)
-		printf("read in of complete VAT file failed (error %d)\n",
-		    error);
+		printf("UDF mount: Error reading in of complete VAT file."
+		    " (error %d)\n", error);
 	if (error != 0)
 		goto out;
 
@@ -1143,7 +1144,8 @@ udf_search_vat(struct udf_mount *ump)
 		}
 
 		if (vat_loc == ump->last_possible_vat_location)
-			printf("VAT not found at last possible location\n");
+			printf("UDF mount: VAT not found at last written "
+			    "location\n");
 
 		vat_loc--;
 	} while (vat_loc >= early_vat_loc);
@@ -1206,8 +1208,8 @@ udf_read_metadata_nodes(struct udf_mount *ump, union udf_pmap *mapping)
 			udf_get_node(ump, icb_loc, &ump->metadata_node);
 		
 		if (ump->metadata_node != NULL)
-			printf( "udf mount: Metadata file not readable, "
-				"substituting Metadata copy file\n");
+			printf("UDF mount: Metadata file not readable, "
+			    "substituting Metadata copy file\n");
 	}
 
 	/* if we're mounting read-only we relax the requirements */
@@ -1361,7 +1363,7 @@ udf_read_rootdirs(struct udf_mount *ump)
 	 */
 	dir_loc = &ump->fileset_desc->streamdir_icb;
 	if (le32toh(dir_loc->len)) {
-		printf("udf_read_rootdirs: streamdir defined ");
+		printf("UDF mount: streamdir defined ");
 		error = udf_get_node_id(*dir_loc, &ino);
 		if (error == 0)
 			error = udf_vget(mp, ino, LK_EXCLUSIVE, 
@@ -1378,10 +1380,14 @@ udf_read_rootdirs(struct udf_mount *ump)
 	}
 
 	/* release the vnodes again; they'll be auto-recycled later */
-	if (streamdir_node != NULL)
+	if (streamdir_node != NULL) {
+		vgone(streamdir_node);
 		vput(streamdir_node);
-	if (rootdir_node != NULL)
+	}
+	if (rootdir_node != NULL) {
+		vgone(rootdir_node);
 		vput(rootdir_node);
+	}
 
 	return (0);
 }
@@ -1401,11 +1407,12 @@ udf_get_node_id(const struct long_ad icbptr, ino_t *ino)
 	part = le16toh(icbptr.loc.part_num);
 
 	if ((blkn + 1) & 0xE0000000) {
-		printf("Block number too large to convert to inode number.\n");
+		printf("UDF: Block number too large to convert to inode "
+		    "number.\n");
 		return EDOOFUS;
 	}
 	if (part & 0xFFF8) {
-		printf("Partition number too large to convert to inode "
+		printf("UDF: Partition number too large to convert to inode "
 		    "number.\n");
 		return EDOOFUS;
 	}

@@ -89,7 +89,7 @@ udf_init(struct vfsconf *notused)
 	    sizeof(struct udf_node), NULL, NULL, NULL, NULL, 0, 0);
 
 	if (udf_zone_node == NULL) {
-		printf("Cannot create node pool zone.");
+		printf("UDF mount: Cannot create node pool zone.");
 		return (ENOMEM);
 	}
 
@@ -193,7 +193,6 @@ udf_mount(struct mount *mp)
 		vput(devvp);
 		return (error);
 	}
-	
 
 	/*
 	 * Open device and try to mount it!
@@ -221,11 +220,6 @@ udf_unmount(struct mount *mp, int mntflags)
 
 	flags = (mntflags & MNT_FORCE) ? FORCECLOSE : 0;
 
-	/*
-	 * By specifying SKIPSYSTEM we can skip vnodes marked with VV_SYSTEM.
-	 * This hardly documented feature allows us to exempt certain files
-	 * from being flushed.
-	 */
 	error = vflush(mp, 0, flags, curthread);
 	if (error != 0)
 		return (error);
@@ -394,15 +388,14 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	while ((1 << bshift) < ump->sector_size)
 		bshift++;
 	if ((1 << bshift) != ump->sector_size) {
-		printf("UDF mount: "
-		       "hit implementation fence on sector size\n");
+		printf("UDF mount: hit implementation fence on sector size\n");
 		return (EIO);
 	}
 
 	/* temporary check to overcome sectorsize >= 8192 bytes panic */
 	if (ump->sector_size >= 8192) {
-		printf("UDF mount: "
-			"hit implementation limit, sectorsize to big\n");
+		printf("UDF mount: hit implementation limit, sectorsize to "
+		    "big\n");
 		return (EIO);
 	}
 
@@ -441,8 +434,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	/* check if volume integrity is closed otherwise its dirty */
 	logvol_integrity = le32toh(ump->logvol_integrity->integrity_type);
 	if (logvol_integrity != UDF_INTEGRITY_CLOSED) {
-		printf("UDF mount: file system is not clean; ");
-		printf("please fsck(8)\n");
+		printf("UDF mount: file system is not clean\n");
 		error = EPERM;
 		goto fail;
 	}
@@ -484,7 +476,7 @@ udf_root(struct mount *mp, int flags, struct vnode **vpp)
 	if (error == 0)
 		error = udf_vget(mp, ino, flags, vpp);
 	if (error != 0 && ((*vpp)->v_vflag & VV_ROOT) == 0) {
-		printf("NOT A ROOT NODE?");
+		printf("UDF: Internal error: invalid root node.");
 		return (EDOOFUS);
 	}
 
@@ -500,10 +492,9 @@ udf_statfs(struct mount *mp, struct statfs *sbp)
 	uint64_t files, freeblks, sizeblks; 
 	int num_part;
 	
-/*	mutex_enter(&ump->allocate_mutex); */
 	udf_calc_freespace(ump, &sizeblks, &freeblks);
-	files = 0;
 
+	files = 0;
 	lvid = ump->logvol_integrity;
 	num_part = le32toh(lvid->num_part);
 	impl = (struct udf_logvol_info *)(lvid->tables + 2*num_part);
@@ -511,7 +502,6 @@ udf_statfs(struct mount *mp, struct statfs *sbp)
 		files = le32toh(impl->num_files);
 		files += le32toh(impl->num_directories);
 	}
-/*	mutex_exit(&ump->allocate_mutex); */
 	
 	sbp->f_version = STATFS_VERSION; 	/* structure version number */
 	/*uint32_t f_type;*/			/* type of filesystem */
@@ -584,7 +574,6 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	if (error != 0)
 		return (error);
 
-	/* TODO: Does this leak unode or vnodes? */
 	error = vfs_hash_insert(nvp, ino, flags, curthread, vpp, NULL, NULL);
 	if (error != 0 || *vpp != NULL)
 		return (error);
@@ -595,7 +584,6 @@ udf_vget(struct mount *mp, ino_t ino, int flags, struct vnode **vpp)
 	udf_get_node_longad(ino, &icb);
 	error = udf_get_node(ump, icb, &unode);
 	if (error != 0) {
-		vgone(nvp);
 		vput(nvp);
 		return (error);
 	}

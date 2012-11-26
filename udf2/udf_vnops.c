@@ -223,46 +223,53 @@ udf_strategy(struct vop_strategy_args *ap)
 	struct bufobj *bo = &udf_node->ump->devvp->v_bufobj;
 	uint64_t lsector;
 	int error, exttype;
-	uint32_t from, lb_size, sectors, maxblks;
+	uint32_t sector_size, maxblks;
 
 	if (vp->v_type == VBLK || vp->v_type == VCHR)
 		panic("udf_strategy: spec");
 
 	/* get sector size */
-	lb_size = udf_node->ump->sector_size;
-	from = bp->b_blkno;
-	sectors = bp->b_bcount / lb_size;
+	sector_size = udf_node->ump->sector_size;
 
 	/* get logical block and run */
-	error = udf_bmap_translate(udf_node, bp->b_lblkno, &exttype, &lsector,
-	    &maxblks);
-	if (error != 0) {
-		bp->b_error = error;
-		bufdone(bp);
-		return (error);
+	if (bp->b_blkno == bp->b_lblkno) {
+		error = udf_bmap_translate(udf_node, bp->b_lblkno, &exttype,
+		    &lsector, &maxblks);
+		if (error != 0) {
+			bp->b_error = error;
+			bp->b_ioflags |= BIO_ERROR;
+			bufdone(bp);
+			return (error);
+		}
+
+		if (exttype == UDF_TRAN_ZERO) {
+			bp->b_blkno = -1;
+			vfs_bio_clrbuf(bp);
+		}
+		else if (exttype == UDF_TRAN_INTERN)
+			bp->b_blkno = -2;
+		else
+			bp->b_blkno = lsector * (sector_size / DEV_BSIZE);
 	}
 
-	if (bp->b_iocmd & BIO_READ) {
-		if (exttype == UDF_TRAN_ZERO) {
-			memset(bp->b_data, 0, lb_size);
-			if ((bp->b_flags & B_ASYNC) == 0)
-				bufwait(bp);
-		} else if (exttype == UDF_TRAN_INTERN) {
-			error = udf_read_internal(udf_node,
-			    (uint8_t *)bp->b_data);
-			if (error != 0)
-				bp->b_error  = error;
-			bufdone(bp);
-			if ((bp->b_flags & B_ASYNC) == 0)
-				bufwait(bp);
-		} else {
-			bp->b_blkno = lsector * 
-			    (udf_node->ump->sector_size / DEV_BSIZE);
-			bp->b_iooffset = dbtob(bp->b_blkno);
-			BO_STRATEGY(bo, bp);
-		}
-	} else
+	if ((bp->b_iocmd & BIO_READ) == 0)
 		return (ENOTSUP);
+
+	if (bp->b_blkno == -1) {
+		bufdone(bp);
+		printf("UDF: Hole in file found. (This is a debuging statement,"
+		    "not an error.\n");
+	} else if (bp->b_blkno == -2) {
+		error = udf_read_internal(udf_node, (uint8_t *)bp->b_data);
+		if (error != 0) {
+			bp->b_error = error;
+			bp->b_ioflags |= BIO_ERROR;
+		}
+		bufdone(bp);
+	} else {
+		bp->b_iooffset = dbtob(bp->b_blkno);
+		BO_STRATEGY(bo, bp);
+	}
 
 	return (bp->b_error);
 }
@@ -355,7 +362,7 @@ udf_readdir(struct vop_readdir_args *ap)
 			/* transfer a new fid/dirent */
 			error = udf_read_fid_stream(vp, &diroffset, fid);
 			if (error != 0) {
-				printf("Read error in read fid: %d\n", error);
+				printf("UDF: Read error in read fid: %d\n", error);
 				break;
 			}
 			
