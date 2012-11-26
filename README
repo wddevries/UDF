@@ -7,5 +7,4 @@ decreased functionality without this step.)
 'udf2_iconv', and then 'mount_udf2'.  
 
 REMAINING WORK ITEMS:
- * Add support for CD drives to driver.patch
  * Extensive testing, including with metadata partition disk.
