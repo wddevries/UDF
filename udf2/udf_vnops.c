@@ -174,8 +174,20 @@ udf_read(struct vop_read_args *ap)
 	return (error);
 }
 
+#if 0
+/* b_lblkno value passed into strategy as a result of the bmap function does not
+appear to be set to valid values, so don't use it.  Since b_blkno seems correct,
+everything is based on it. */
+
 static int
-udf_bmap(struct vop_bmap_args *ap)
+udf_bmap(struct vop_bmap_args /* {
+		struct vnode *a_vp;
+		daddr_t  a_bn;
+		struct bufobj **a_bop;
+		daddr_t *a_bnp;
+		int *a_runp;
+		int *a_runb;
+	} */ *ap)
 {
 	struct vnode *vp = ap->a_vp;
 	struct udf_node *udf_node = VTOI(vp);
@@ -184,7 +196,8 @@ udf_bmap(struct vop_bmap_args *ap)
 	uint32_t maxblks;
 
 	if (ap->a_bop != NULL)
-		*ap->a_bop = &udf_node->ump->devvp->v_bufobj;
+		*ap->a_bop = &ap->a_vp->v_bufobj;
+		//*ap->a_bop = &udf_node->ump->devvp->v_bufobj;
 
 	if (ap->a_bnp == NULL)
 		return (0);
@@ -197,7 +210,8 @@ udf_bmap(struct vop_bmap_args *ap)
 
 	/* convert to dev blocks */
 	if (exttype == UDF_TRAN_INTERN)
-		return (EOPNOTSUPP);
+		*ap->a_bnp = -2;
+		//return (EOPNOTSUPP);
 	else if (exttype == UDF_TRAN_ZERO)
 		*ap->a_bnp = -1; /* zero the buffer */
 	else
@@ -231,10 +245,13 @@ udf_strategy(struct vop_strategy_args *ap)
 	/* get sector size */
 	sector_size = udf_node->ump->sector_size;
 
+
 	/* get logical block and run */
+	printf("%ld:%ld ", bp->b_blkno, bp->b_lblkno);
 	if (bp->b_blkno == bp->b_lblkno) {
 		error = udf_bmap_translate(udf_node, bp->b_lblkno, &exttype,
 		    &lsector, &maxblks);
+
 		if (error != 0) {
 			bp->b_error = error;
 			bp->b_ioflags |= BIO_ERROR;
@@ -267,6 +284,83 @@ udf_strategy(struct vop_strategy_args *ap)
 		}
 		bufdone(bp);
 	} else {
+		bp->b_iooffset = dbtob(bp->b_blkno);
+		BO_STRATEGY(bo, bp);
+	}
+
+	return (bp->b_error);
+}
+#endif
+
+static int
+udf_bmap(struct vop_bmap_args /* {
+		struct vnode *a_vp;
+		daddr_t  a_bn;
+		struct bufobj **a_bop;
+		daddr_t *a_bnp;
+		int *a_runp;
+		int *a_runb;
+	} */ *ap)
+{
+
+	if (ap->a_bop != NULL)
+		*ap->a_bop = &ap->a_vp->v_bufobj;
+	if (ap->a_bnp != NULL)
+		*ap->a_bnp = ap->a_bn;
+	if (ap->a_runp != NULL)
+		*ap->a_runp = 0;
+	if (ap->a_runb != NULL)
+		*ap->a_runb = 0;
+	return (0);
+}
+
+static int
+udf_strategy(struct vop_strategy_args *ap)
+{
+	struct vnode *vp = ap->a_vp;
+	struct buf *bp = ap->a_bp;
+	struct udf_node *udf_node = VTOI(vp);
+	struct bufobj *bo = &udf_node->ump->devvp->v_bufobj;
+	uint64_t lsector;
+	int error, exttype;
+	uint32_t sector_size, maxblks;
+
+	if (vp->v_type == VBLK || vp->v_type == VCHR)
+		panic("udf_strategy: spec");
+
+	if ((bp->b_iocmd & BIO_READ) == 0)
+		return (ENOTSUP);
+
+	/* get sector size */
+	sector_size = udf_node->ump->sector_size;
+
+	/* get logical block and run */
+	error = udf_bmap_translate(udf_node, bp->b_blkno, &exttype,
+	    &lsector, &maxblks);
+	if (error != 0) {
+		bp->b_error = error;
+		bp->b_ioflags |= BIO_ERROR;
+		bufdone(bp);
+		return (error);
+	}
+
+	if (exttype == UDF_TRAN_ZERO) {
+		bp->b_blkno = -1;
+		vfs_bio_clrbuf(bp);
+		bufdone(bp);
+		printf("UDF: Hole in file found. (This is a debuging statement,"
+		    "not an error.\n");
+	}
+	else if (exttype == UDF_TRAN_INTERN){
+		error = udf_read_internal(udf_node, (uint8_t *)bp->b_data);
+		if (error != 0) {
+			bp->b_error = error;
+			bp->b_ioflags |= BIO_ERROR;
+		}
+		bufdone(bp);
+	}
+	else {
+		bp->b_blkno = lsector * (sector_size / DEV_BSIZE);
 		bp->b_iooffset = dbtob(bp->b_blkno);
 		BO_STRATEGY(bo, bp);
 	}
