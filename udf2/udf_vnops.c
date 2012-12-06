@@ -42,7 +42,9 @@
 #include <sys/unistd.h>
 #include <sys/bio.h>
 
-//#include <fs/fifofs/fifo.h>
+#if __FreeBSD__ < 10
+#include <fs/fifofs/fifo.h>
+#endif
 
 #include "ecma167-udf.h"
 #include "udf.h"
