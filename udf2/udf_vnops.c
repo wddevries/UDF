@@ -131,9 +131,10 @@ udf_read(struct vop_read_args *ap)
 	struct uio *uio = ap->a_uio;
 	struct buf *bp;
 	struct udf_node *udf_node = VTOI(vp);
-	uint64_t file_size;
-	int lbn, n, on; 
+	uint64_t fsize;
+	int lbn, n, on, sector_size; 
 	int error = 0;
+	uint8_t *zerobuf;
 
 	/* can this happen? some filingsystems have this check */
 	if (uio->uio_offset < 0)
@@ -149,28 +150,37 @@ udf_read(struct vop_read_args *ap)
 
 	/* get file/directory filesize */
 	if (udf_node->fe != NULL)
-		file_size = le64toh(udf_node->fe->inf_len);
+		fsize = le64toh(udf_node->fe->inf_len);
 	else 
-		file_size = le64toh(udf_node->efe->inf_len);
+		fsize = le64toh(udf_node->efe->inf_len);
+
+	sector_size = udf_node->ump->sector_size;
 
 	/* read contents using buffercache */
-	while (error == 0 && uio->uio_resid > 0) {
-		/* reached end? */
-		if (file_size <= uio->uio_offset)
-			break;
+	while (error == 0 && uio->uio_resid > 0 && fsize > uio->uio_offset) {
+ 		lbn = uio->uio_offset / sector_size;
+		on = uio->uio_offset % sector_size;
 
-		n = min(file_size - uio->uio_offset, uio->uio_resid);
+		n = min(sector_size - on, uio->uio_resid);
+		n = min(n, fsize - uio->uio_offset);
 
- 		lbn = uio->uio_offset / udf_node->ump->sector_size;
-		on = uio->uio_offset % udf_node->ump->sector_size;
-		n = min(udf_node->ump->sector_size - on, uio->uio_resid);
-		n = min(n, file_size - uio->uio_offset);
-		error = bread(vp, lbn, udf_node->ump->sector_size, NOCRED, &bp);
-		n = min(n, udf_node->ump->sector_size - bp->b_resid);
+		error = bread(vp, lbn, sector_size, NOCRED, &bp);
+		n = min(n, sector_size - bp->b_resid);
+
 		if (error == 0) 
 			error = uiomove(bp->b_data + on, n, uio);
 
 		brelse(bp);
+	}
+
+	if (vp->v_type == VDIR && fsize <= uio->uio_offset &&
+	    uio->uio_resid > 0) {
+		zerobuf = malloc(2048, M_UDFTEMP, M_WAITOK | M_ZERO);
+		while (error == 0 && uio->uio_resid > 0) {
+			n = min(2048, uio->uio_resid);
+			error = uiomove(zerobuf, n, uio);
+		}
+		free(zerobuf, M_UDFTEMP);
 	}
 
 	return (error);
