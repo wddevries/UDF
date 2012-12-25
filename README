@@ -7,4 +7,4 @@ decreased functionality without this step.)
 'udf2_iconv', and then 'mount_udf2'.  
 
 REMAINING WORK ITEMS:
- * Extensive testing, including with metadata partition disk.
+ * Extensive testing
