@@ -170,7 +170,6 @@ translate_again:
 		*extres = ump->sparable_packet_size - lb_rel;
 		return (0);
 	case UDF_VTOP_TYPE_META:
-printf("Metadata Partition Translated\n");
 		/* we have to look into the file's allocation descriptors */
 
 		/* use metadatafile allocation mutex */

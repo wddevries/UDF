@@ -643,8 +643,6 @@ udf_process_vds(struct udf_mount *ump) {
 			}
 			check_name = "*UDF Metadata Partition";
 			if (strncmp(map_name, check_name, len) == 0) {
-printf("UDF: UDF Metadata Partition loaded. (This is a debugging statement, not"
-    "an error)\n");
 				pmap_type = UDF_VTOP_TYPE_META;
 				n_meta++;
 				break;
@@ -1197,8 +1195,17 @@ udf_read_metadata_nodes(struct udf_mount *ump, union udf_pmap *mapping)
 	struct part_map_meta *pmm = &mapping->pmm;
 	struct long_ad icb_loc;
 	int error = 0;
+	char *windows_id = "*Microsoft Windows";
 
-	icb_loc.loc.part_num = pmm->part_num;
+	/* 
+	 * The mappings come from the logical volume descripor, and Windows does
+	 * not write a usable partion number into the metadata map descriptor. 
+	 */
+	if (strncmp(windows_id, ump->logical_vol->imp_id.id, 23) == 0)
+		icb_loc.loc.part_num = 0;
+	else
+		icb_loc.loc.part_num = pmm->part_num;
+
 	icb_loc.loc.lb_num = pmm->meta_file_lbn;
 	udf_get_node(ump, icb_loc, &ump->metadata_node);
 
