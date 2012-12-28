@@ -1370,20 +1370,22 @@ udf_read_rootdirs(struct udf_mount *ump)
 	 */
 	dir_loc = &ump->fileset_desc->streamdir_icb;
 	if (le32toh(dir_loc->len)) {
-		printf("UDF mount: streamdir defined ");
 		error = udf_get_node_id(*dir_loc, &ino);
 		if (error == 0)
 			error = udf_vget(mp, ino, LK_EXCLUSIVE, 
 			    &streamdir_node);
 		if (error != 0)
-			printf("but error in streamdir reading\n");
+			printf("UDF mount: streamdir defined but error in "
+			    "streamdir reading\n");
+#if 0
 		else {
-			printf("but ignored\n");
+			printf("UDF mount: streamdir defined but ignored\n");
 			/*
 			 * TODO process streamdir `baddies' i.e. files we dont
 			 * want if R/W
 			 */
 		}
+#endif
 	}
 
 	/* release the vnodes again; they'll be auto-recycled later */
