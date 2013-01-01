@@ -1,5 +1,18 @@
+diff --git sbin/mount/mount.c sbin/mount/mount.c
+index 1984eac..f8f8bff 100644
+--- sbin/mount/mount.c
++++ sbin/mount/mount.c
+@@ -143,7 +143,7 @@ use_mountprog(const char *vfstype)
+ 	unsigned int i;
+ 	const char *fs[] = {
+ 	"cd9660", "mfs", "msdosfs", "nfs",
+-	"nullfs", "oldnfs", "udf", "unionfs",
++	"nullfs", "oldnfs", "udf", "udf2", "unionfs",
+ 	NULL
+ 	};
+ 
 diff --git sys/cam/scsi/scsi_cd.c sys/cam/scsi/scsi_cd.c
-index d5d7156..8d772f3 100644
+index d5d7156..25a26fb 100644
 --- sys/cam/scsi/scsi_cd.c
 +++ sys/cam/scsi/scsi_cd.c
 @@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
@@ -50,7 +63,7 @@ index d5d7156..8d772f3 100644
  	default:
  		cam_periph_lock(periph);
  		error = cam_periph_ioctl(periph, cmd, addr, cderror);
-@@ -2847,6 +2874,247 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
+@@ -2847,6 +2874,249 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
  	return (error);
  }
  
@@ -163,11 +176,13 @@ index d5d7156..8d772f3 100644
 +	/* Only needed for sequentially written disk, but populate it anyway.*/
 +	if (lra_valid != 0)
 +		usi->session_last_written = lra;
-+	else if (nwa_valid != 0)
-+		usi->session_last_written = nwa - linksize;
-+	else /* It is possible this will never run. */
-+		usi->session_last_written = usi->session_end_addr - 
-+		    free_blocks - linksize;
++	/* else if (nwa_valid != 0)
++		usi->session_last_written = nwa - linksize; */
++	else {
++		usi->session_last_written = usi->session_end_addr;
++		if (free_blocks)
++			usi->session_last_written -= free_blocks + linksize;
++	}
 +
 +	usi->sector_size = 2048; /* Almost all CDs have this block size. */
 +out:

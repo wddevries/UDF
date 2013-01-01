@@ -77,38 +77,39 @@ struct mntopt mopts[] = {
 static void	get_session_info(char *dev, struct udf_session_info *usi, 
    		    int session_num);
 static void	print_session_info(char *dev, int session_num);
-static int	set_charset(char **, char **, const char *);
+static int	set_charset(char *, char *, const char *);
 static void	usage(void);
 
 int
 main(int argc, char **argv)
 {
 	struct udf_session_info usi;
-	struct iovec iov[24];
+	struct iovec *iov;
 	struct passwd *nobody;
 	long session_num;
 	gid_t gid;
-	int ch, i, mntflags, opts, sessioninfo, udf_flags, verbose;
+	int iovlen, ch, mntflags, opts, sessioninfo, verbose;
 	int nobody_gid, nobody_uid;
 	int32_t first_trackblank;
 	uid_t uid;
-	char *cs_disk, *cs_local, *dev, *dir, *endp, mntpath[MAXPATHLEN];
+	char cs_disk[ICONV_CSNMAXLEN], cs_local[ICONV_CSNMAXLEN];
+	char *dev, *dir, *endp, mntpath[MAXPATHLEN];
 
+	cs_disk[0] = cs_local[0] = '\0';
 	session_num = 0;
 	sessioninfo = 0;
 	gid = 0;
 	uid = 0;
 	nobody_uid = 1;
 	nobody_gid = 1;
+	iov = NULL;
+	iovlen = 0;
+	mntflags = opts = verbose = 0;
 
-	i = mntflags = opts = udf_flags = verbose = 0;
-	cs_disk = cs_local = NULL;
 	while ((ch = getopt(argc, argv, "C:G:o:ps:U:v")) != -1)
 		switch (ch) {
 		case 'C':
-			if (set_charset(&cs_disk, &cs_local, optarg) == -1)
-				err(EX_OSERR, "udf2_iconv");
-			udf_flags |= UDFMNT_KICONV;
+			set_charset(cs_disk, cs_local, optarg);
 			break;
 		case 'G':
 			gid = strtol(optarg, &endp, 10);
@@ -155,7 +156,6 @@ main(int argc, char **argv)
 	dev = argv[0];
 	dir = argv[1];
 
-
 	/*
 	 * Resolve the mountpoint with realpath(3) and remove unnecessary
 	 * slashes from the devicename if there are any.
@@ -189,95 +189,48 @@ main(int argc, char **argv)
 	 */
 	mntflags |= MNT_RDONLY;
 
-	iov[i].iov_base = "fstype";
-	iov[i++].iov_len = sizeof("fstype");
-	iov[i].iov_base = "udf2";
-	iov[i].iov_len = strlen(iov[i].iov_base) + 1;
-	i++;
-	
-	iov[i].iov_base = "fspath";
-	iov[i++].iov_len = sizeof("fspath");
-	iov[i].iov_base = mntpath;
-	iov[i++].iov_len = strlen(mntpath) + 1;
+	build_iovec(&iov, &iovlen, "fstype", "udf2", (size_t) - 1);
+	build_iovec(&iov, &iovlen, "fspath", mntpath, (size_t) - 1);
+	build_iovec(&iov, &iovlen, "from", dev, (size_t) - 1);
+	build_iovec(&iov, &iovlen, "anon_uid", &uid, sizeof(uid));
+	build_iovec(&iov, &iovlen, "anon_gid", &gid, sizeof(gid));
+	build_iovec(&iov, &iovlen, "first_trackblank", 
+	    &usi.session_first_track_blank, sizeof(uint8_t));
+	build_iovec(&iov, &iovlen, "session_start_addr",
+	    &usi.session_start_addr, sizeof(uint32_t));
+	build_iovec(&iov, &iovlen, "session_end_addr", &usi.session_end_addr, 
+	    sizeof(uint32_t));
+	build_iovec(&iov, &iovlen, "session_last_written",
+	    &usi.session_last_written, sizeof(uint32_t));
 
-	iov[i].iov_base = "from";
-	iov[i++].iov_len = sizeof("from");
-	iov[i].iov_base = dev;
-	iov[i++].iov_len = strlen(dev) + 1;
-
-	iov[i].iov_base = "flags";
-	iov[i++].iov_len = sizeof("flags");
-	iov[i].iov_base = &udf_flags;
-	iov[i++].iov_len = sizeof(udf_flags);
-
-	iov[i].iov_base = "anon_uid";
-	iov[i++].iov_len = sizeof("anon_uid");
-	iov[i].iov_base = &uid;
-	iov[i++].iov_len = sizeof(uid);
-
-	iov[i].iov_base = "anon_gid";
-	iov[i++].iov_len = sizeof("anon_gid");
-	iov[i].iov_base = &gid;
-	iov[i++].iov_len = sizeof(gid);
-
-	iov[i].iov_base = "first_trackblank";
-	iov[i++].iov_len = sizeof("first_trackblank");
-	iov[i].iov_base = &usi.session_first_track_blank;
-	iov[i++].iov_len = sizeof(uint8_t);
-
-	iov[i].iov_base = "session_start_addr";
-	iov[i++].iov_len = sizeof("session_start_addr");
-	iov[i].iov_base = &usi.session_start_addr;
-	iov[i++].iov_len = sizeof(uint32_t);
-
-	iov[i].iov_base = "session_end_addr";
-	iov[i++].iov_len = sizeof("session_end_addr");
-	iov[i].iov_base = &usi.session_end_addr;
-	iov[i++].iov_len = sizeof(uint32_t);
-
-	iov[i].iov_base = "session_last_written";
-	iov[i++].iov_len = sizeof("session_last_written");
-	iov[i].iov_base = &usi.session_last_written;
-	iov[i++].iov_len = sizeof(uint32_t);
-
-	if (udf_flags & UDFMNT_KICONV) {
-		iov[i].iov_base = "cs_disk";
-		iov[i++].iov_len = sizeof("cs_disk");
-		iov[i].iov_base = cs_disk;
-		iov[i++].iov_len = strlen(cs_disk) + 1;
-		iov[i].iov_base = "cs_local";
-		iov[i++].iov_len = sizeof("cs_local");
-		iov[i].iov_base = cs_local;
-		iov[i++].iov_len = strlen(cs_local) + 1;
+	if (cs_local[0] != '\0') {
+		build_iovec(&iov, &iovlen, "cs_disk", cs_disk, (size_t) - 1);
+		build_iovec(&iov, &iovlen, "cs_local", cs_local, (size_t) - 1);
 	}
 
-	if (nmount(iov, i, mntflags) < 0)
+	if (nmount(iov, iovlen, mntflags) < 0)
 		err(1, "%s", dev);
 
+	free(iov);
 	exit(0);
 }
 
 static int
-set_charset(char **cs_disk, char **cs_local, const char *localcs)
+set_charset(char *cs_disk, char *cs_local, const char *localcs)
 {
 	int error;
 
 	if (modfind("udf2_iconv") < 0)
 		if (kldload("udf2_iconv") < 0 || modfind("udf2_iconv") < 0) {
-			warnx("cannot find or load \"udf2_iconv\" kernel"
-			    " module");
-			return (-1);
+			errx(EX_OSERR, "cannot find or load \"udf2_iconv\" "
+			    "kernel module");
 		}
 
-	if ((*cs_disk = malloc(ICONV_CSNMAXLEN)) == NULL)
-		return (-1);
-	if ((*cs_local = malloc(ICONV_CSNMAXLEN)) == NULL)
-		return (-1);
-	strncpy(*cs_disk, ENCODING_UNICODE, ICONV_CSNMAXLEN);
-	strncpy(*cs_local, localcs, ICONV_CSNMAXLEN);
-	error = kiconv_add_xlat16_cspairs(*cs_disk, *cs_local);
+	strncpy(cs_disk, ENCODING_UNICODE, ICONV_CSNMAXLEN);
+	strncpy(cs_local, localcs, ICONV_CSNMAXLEN);
+	error = kiconv_add_xlat16_cspairs(cs_disk, cs_local);
 	if (error != 0)
-		return (-1);
+		err(EX_OSERR, "udf2_iconv");
 
 	return (0);
 }

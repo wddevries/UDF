@@ -40,6 +40,9 @@
 #include <sys/module.h>
 #include <sys/priv.h>
 #include <sys/iconv.h>
+#if 0
+#include <sys/udfio.h>
+#endif
 #include <geom/geom.h>
 #include <geom/geom_vfs.h>
 
@@ -247,6 +250,46 @@ udf_unmount(struct mount *mp, int mntflags)
 	return (0);
 }
 
+#if 0
+static int
+get_session_info(struct g_consumer *cp, struct udf_session_info *usi, 
+    int session_num)
+{
+	int error;
+
+	bzero(usi, sizeof(struct udf_session_info));
+	usi->session_num = session_num;
+
+	error =  cp->provider->geom->ioctl(cp->provider, UDFIOREADSESSIONINFO,
+	    usi, 0, curthread);
+	if (error != 0) {
+		if (session_num != 0)
+			printf("Cannot mount selected session.  This "
+			    "device does not properly support multi-sessions "
+			    "disc.");
+		
+		printf("Warning, this device does not properly support "
+		    "multi-sessions disc.");
+
+		return (error);
+	}
+
+	printf("Number of Sessions: %u\n", usi->num_sessions);
+	printf("Number of Tracks: %u\n", usi->num_tracks);
+	printf("First Track Number: %u\n", usi->first_track);
+	printf("Sector Size: %u\n", usi->sector_size);
+	
+	printf("Session Number: %u\n", usi->session_num);
+	printf("Session Start Address: %u\n", usi->session_start_addr);
+	printf("Session End Address: %u\n", usi->session_end_addr);
+	printf("Last Written Address in Session: %u\n", usi->session_last_written);
+	printf("First Track Number of Session: %u\n", usi->session_first_track);
+	printf("Last Track of Session: %u\n", usi->session_last_track);
+
+	return (0);
+}
+#endif
+
 /*
  * Helper function of udf_mount() that actually mounts the disc.
  */
@@ -255,7 +298,10 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 {
 	struct g_consumer *cp;
 	struct udf_mount *ump = NULL;
-	int error, len, num_anchors, *udf_flags = NULL;
+#if 0
+	struct udf_session_info usi;
+#endif
+	int error, len, num_anchors;
 	uint32_t bshift, logvol_integrity, numsecs; /*lb_size,*/
 	char *cs_disk, *cs_local;
 	void *optdata = NULL;
@@ -303,12 +349,6 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	ump->geomcp = cp;
 
 	/* read in options */
-	error = vfs_getopt(mp->mnt_optnew, "flags", (void **)&udf_flags, &len);
-	if (error != 0 || len != sizeof(int)) {
-		error = EINVAL;
-		goto fail;
-	}
-	ump->flags = *udf_flags;
 	
 	error = vfs_getopt(mp->mnt_optnew, "anon_uid", &optdata, &len);
 	if (error != 0 || len != sizeof(int)) {
@@ -323,6 +363,28 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 		goto fail;
 	}
 	ump->anon_gid = *(gid_t *)optdata;
+
+#if 0
+	printf("si_name: %s\n", devvp->v_rdev->si_name);
+	if (devvp->v_rdev->si_name[0] == 'c' && 
+	    devvp->v_rdev->si_name[1] == 'd')
+	{
+		error = get_session_info(cp, &usi, 0);
+		if (error != 0)
+			goto fail;
+
+		ump->first_trackblank = usi.session_first_track_blank;
+		ump->session_start = usi.session_start_addr;
+		ump->session_end = usi.session_end_addr;
+		ump->session_last_written = usi.session_last_written; 
+	} else {
+		ump->first_trackblank = 0;
+		ump->session_start = 0;
+		numsecs = cp->provider->mediasize / cp->provider->sectorsize;
+		ump->session_end = numsecs;
+		ump->session_last_written = numsecs;
+	}
+#endif
 
 	error = vfs_getopt(mp->mnt_optnew, "first_trackblank", &optdata, &len);
 	if (error != 0 || len != sizeof(uint8_t)) {
@@ -358,7 +420,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	numsecs = cp->provider->mediasize / cp->provider->sectorsize;
 	if (ump->session_end == 0)
 		ump->session_end = numsecs;
-
+	
 	/* We should only need to search one, so this is also a hack. */
 	if (ump->session_end - ump->session_start > 25)
 		ump->first_possible_vat_location = ump->session_last_written -
@@ -367,13 +429,15 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 		ump->first_possible_vat_location = ump->session_start;
 	ump->last_possible_vat_location = ump->session_last_written;
 
-	if (ump->flags & UDFMNT_KICONV && udf2_iconv != NULL) {
+	ump->flags = 0;
+	cs_local = NULL;
+	error = vfs_getopt(mp->mnt_optnew, "cs_local", 
+	    (void **)&cs_local, &len);
+	if (error == 0 && udf2_iconv != NULL) {
+		ump->flags = UDFMNT_KICONV;
 		cs_disk = "UTF-16BE";
 
-		cs_local = NULL;
-		error = vfs_getopt(mp->mnt_optnew, "cs_local", 
-		    (void **)&cs_local, &len);
-		if (error != 0 || cs_local[len-1] != '\0') {
+		if (cs_local[len-1] != '\0') {
 			error = EINVAL;
 			goto fail;
 		}
