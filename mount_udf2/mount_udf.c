@@ -115,7 +115,7 @@ main(int argc, char **argv)
 			gid = strtol(optarg, &endp, 10);
 			if (optarg == endp || *endp != '\0')
 				usage();	
-			nobody_gid = 1;
+			nobody_gid = 0;
 			break;
 		case 'o':
 			getmntopts(optarg, mopts, &mntflags, &opts);
@@ -132,7 +132,7 @@ main(int argc, char **argv)
 			uid = strtol(optarg, &endp, 10);
 			if (optarg == endp || *endp != '\0')
 				usage();	
-			nobody_uid = 1;
+			nobody_uid = 0;
 			break;
 		case 'v':
 			verbose++;

@@ -1,15 +1,20 @@
 INSTALLATION:
 
-1. Apply 'driver.patch' to your source tree and rebuild your kernel.  This adds
-a new ioctl used to read session information from the disc.  It will also add
-udf2 to the list of external mount programs in the mount(8) command.  Unless you
-also ran installworld, also copy 'sys/sys/udfio.h' to 
-'/usr/include/sys/udfio.h'. (The file system will work with decreased 
-functionality without this step.)
+1. Apply 'driver_current.patch' to your source tree and rebuild your kernel.  
+This will make three changes: 
+ * an ioctl will be added to the scsi_cd driver, which is used to read session 
+   information from the disc, 
+ * mount_udf2 will be added to the list of external mount programs in the 
+   mount(8) command, 
+ * and the file 'sys/sys/udfio.h' will be created.  
+Unless you also run "installworld", you will need to copy 'sys/sys/udfio.h' to 
+'/usr/include/sys/udfio.h', and rebuild and reinstall the "mount" command 
+(in sbin/mount).  The file system will work without the ioctl, but 
+functionality will be decreased.
 
-2. To build and install UDF2 file system run "make && make install" in the
-project's directory.  This will install the following four files: 'udf2.ko', 
-'udf2_iconv.ko', 'mount_udf2', and 'mount_udf2.8.gz'.
+2. Build and install UDF2 file system by running "make && make install" in the
+project's source directory.  This will install the following four files:
+'udf2.ko', 'udf2_iconv.ko', 'mount_udf2', and 'mount_udf2.8.gz'.
 
 REMAINING WORK ITEMS:
  * Extensive testing

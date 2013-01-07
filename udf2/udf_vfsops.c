@@ -482,7 +482,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	/* check consistency and completeness */
 	error = udf_process_vds(ump);
 	if (error != 0) {
-		printf( "UDF mount: disc not properly formatted(bad VDS)\n");
+		printf( "UDF mount: disc not properly formatted (bad VDS)\n");
 		goto fail;
 	}
 
@@ -498,9 +498,11 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	/* check if volume integrity is closed otherwise its dirty */
 	logvol_integrity = le32toh(ump->logvol_integrity->integrity_type);
 	if (logvol_integrity != UDF_INTEGRITY_CLOSED) {
-		printf("UDF mount: file system is not clean\n");
+		printf("UDF mount: file system was not cleanly unmounted.\n");
+#if 0
 		error = EPERM;
 		goto fail;
+#endif
 	}
 
 	/* read root directory */
@@ -561,7 +563,7 @@ udf_statfs(struct mount *mp, struct statfs *sbp)
 	files = 0;
 	lvid = ump->logvol_integrity;
 	num_part = le32toh(lvid->num_part);
-	impl = (struct udf_logvol_info *)(lvid->tables + 2*num_part);
+	impl = (struct udf_logvol_info *)(lvid->tables + 2 * num_part);
 	if (impl != NULL) {
 		files = le32toh(impl->num_files);
 		files += le32toh(impl->num_directories);

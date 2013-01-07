@@ -1,0 +1,462 @@
+diff --git sbin/mount/mount.c sbin/mount/mount.c
+index 3f6d2ea..cbdff7c 100644
+--- sbin/mount/mount.c
++++ sbin/mount/mount.c
+@@ -144,6 +144,7 @@ use_mountprog(const char *vfstype)
+ 	const char *fs[] = {
+ 	"cd9660", "mfs", "msdosfs", "nfs", "ntfs",
+ 	"nwfs", "nullfs", "oldnfs", "portalfs", "smbfs", "udf", "unionfs",
++	"udf2",
+ 	NULL
+ 	};
+ 
+diff --git sys/cam/scsi/scsi_cd.c sys/cam/scsi/scsi_cd.c
+index 4a13fd8..b6ecb501 100644
+--- sys/cam/scsi/scsi_cd.c
++++ sys/cam/scsi/scsi_cd.c
+@@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
+ #include <sys/cdio.h>
+ #include <sys/cdrio.h>
+ #include <sys/dvdio.h>
++#include <sys/udfio.h>
+ #include <sys/devicestat.h>
+ #include <sys/sysctl.h>
+ #include <sys/taskqueue.h>
+@@ -282,6 +283,20 @@ static	int		cdsendkey(struct cam_periph *periph,
+ static	int		cdreaddvdstructure(struct cam_periph *periph,
+ 					   struct dvd_struct *dvdstruct);
+ 
++/* added for UDF */
++static	int 		udfreaddiscinfo(struct cam_periph *periph, 
++					struct udf_session_info *usi);
++static	int 		cdgetconf(struct cam_periph *periph, u_int8_t *data,
++				  u_int32_t len, uint8_t rt, 
++				  uint16_t startfeature, u_int32_t sense_flags);
++static 	int		cdreaddiscinfo(struct cam_periph *periph, uint8_t *data,
++				       uint32_t len, uint32_t sense_flags);
++static 	int 		cdreadtrackinfo(struct cam_periph *periph, 
++					uint8_t *data, uint32_t len, 
++					uint32_t trackno, 
++					uint32_t sense_flags);
++/* end of UDF */
++
+ static struct periph_driver cddriver =
+ {
+ 	cdinit, "cd",
+@@ -2738,6 +2753,18 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
+ 
+ 		break;
+ 	}
++	case UDFIOREADSESSIONINFO: {
++		struct udf_session_info  *usi;
++
++		usi = (struct udf_session_info *)addr;
++
++		CAM_DEBUG(periph->path, CAM_DEBUG_SUBTRACE, 
++			  ("trying to do UDFIOREADDISCINFO\n"));
++		
++		error = udfreaddiscinfo(periph, usi);
++
++		break;
++		}
+ 	default:
+ 		cam_periph_lock(periph);
+ 		error = cam_periph_ioctl(periph, cmd, addr, cderror);
+@@ -2757,6 +2784,249 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
+ 	return (error);
+ }
+ 
++/* Added for UDF. */
++static int
++udfreaddiscinfo(struct cam_periph *periph, struct udf_session_info *usi)
++{
++	struct scsi_read_disc_info_data *rdi;
++	struct scsi_read_track_info_data *ti;
++	struct scsi_get_conf_header *gch;
++	struct scsi_get_conf_feature_inc_stream_write *lf;
++	uint32_t track_start_addr, track_size, free_blocks, nwa, lra;
++	uint16_t track, sessret;
++	uint8_t lsb, msb;
++	int error, linksize, lra_valid, nwa_valid, diskstate;
++	int sessionstatus;
++
++	rdi = malloc(sizeof(*rdi), M_SCSICD, M_WAITOK | M_ZERO);
++	ti = malloc(sizeof(*ti), M_SCSICD, M_WAITOK | M_ZERO);
++	gch = malloc(sizeof(*gch) + sizeof(*lf), M_SCSICD, M_WAITOK | M_ZERO);
++
++	cam_periph_lock(periph);
++
++	/* Get link size. */
++	linksize = 7; // for CD-Roms
++	
++	error = cdgetconf(periph, (u_int8_t *)gch, sizeof(*gch) + sizeof(*lf),
++	    GC_RT_ONEFEATURE, GC_FC_INCR_STREAMING_WRITABLE, SF_NO_PRINT);
++	lf = (struct scsi_get_conf_feature_inc_stream_write *)(gch + 1);
++	if (error)
++		goto out;
++
++	if (lf->byte3 & GC_CURRENT)
++		if (lf->num_link_sizes > 0) 
++			linksize = lf->first_linksize;
++
++	/* Read get config and header data. */
++	error = cdreaddiscinfo(periph, (uint8_t *)rdi, sizeof (*rdi), 
++	    SF_NO_PRINT);
++	if (error != 0)
++		goto out;
++
++	usi->num_sessions = rdi->num_sessions_lsb | 
++	    (rdi->num_sessions_msb << 8);
++
++	if (usi->session_num == 0) {
++		diskstate = rdi->byte2 & 0x3;
++		sessionstatus = (rdi->byte2 >> 2) & 0x3;
++
++		// if the session is empty, we don't want to read it.
++		if (diskstate < 2 && sessionstatus == 0 && 
++		    usi->num_sessions > 1)
++			usi->session_num = usi->num_sessions - 1;
++		else
++			usi->session_num = usi->num_sessions;
++	}
++
++	usi->first_track = rdi->num_first_track;
++
++	lsb = rdi->last_track_last_session_lsb;
++	msb = rdi->last_track_last_session_msb;
++	usi->num_tracks = ((msb << 8) | lsb) - usi->first_track + 1;
++
++	usi->session_first_track = 0;
++	usi->session_last_track = 0;
++	usi->session_start_addr = 0;
++	track_start_addr = 0;
++	track_size = 0;
++	free_blocks = 0;
++	nwa = 0;
++	lra = 0;
++	lra_valid = 0;
++	nwa_valid = 0;
++	for (track = usi->first_track; track <= usi->num_tracks; track++) {
++		error = cdreadtrackinfo(periph, (uint8_t *)ti, sizeof(*ti), 
++	       			track, /*sense_flags*/SF_NO_PRINT);
++		if (error != 0) {
++			goto out;
++		}
++		sessret = (ti->session_num_msb << 8) | ti->session_num_lsb;
++		if (sessret == usi->session_num) {
++			if (usi->session_first_track == 0) {
++				usi->session_first_track = track;
++				usi->session_start_addr = 
++				    scsi_4btoul(ti->track_start_addr);
++				usi->session_first_track_blank = 
++				    ti->track_info2 & READ_TRACK_BLANK ? 1 : 0;
++			}
++			usi->session_last_track = track;
++			track_start_addr = scsi_4btoul(ti->track_start_addr);
++			track_size = scsi_4btoul(ti->track_size);
++			free_blocks = scsi_4btoul(ti->free_blocks);
++			lra_valid = ti->valid_data & READ_TRACK_INFO_LRA_V;
++			lra = scsi_4btoul(ti->last_recorded_addr);
++			nwa_valid = ti->valid_data & READ_TRACK_INFO_NWA_V;
++			nwa =  scsi_4btoul(ti->next_writable_addr);
++		} 
++		else if (usi->session_first_track != 0)
++			break;
++	}
++	
++	if (usi->session_first_track == 0 || usi->session_last_track == 0) {
++		error = EINVAL;
++		goto out;
++	}
++
++	/* Calculate end address of session. */
++	usi->session_end_addr = track_start_addr + track_size - 1;
++	
++	/* Only needed for sequentially written disk, but populate it anyway.*/
++	if (lra_valid != 0)
++		usi->session_last_written = lra;
++	/* else if (nwa_valid != 0)
++		usi->session_last_written = nwa - linksize; */
++	else {
++		usi->session_last_written = usi->session_end_addr;
++		if (free_blocks)
++			usi->session_last_written -= free_blocks + linksize;
++	}
++
++	usi->sector_size = 2048; /* Almost all CDs have this block size. */
++out:
++	cam_periph_unlock(periph);
++	free(rdi, M_SCSICD);
++	free(ti, M_SCSICD);
++	free(gch, M_SCSICD);
++
++	return error;
++}
++
++static int 
++cdgetconf(struct cam_periph *periph, uint8_t *data, uint32_t len,
++	  uint8_t rt, uint16_t startfeature, uint32_t sense_flags)
++{
++	struct scsi_get_conf *scsi_cmd;
++        struct ccb_scsiio *csio;
++	union ccb *ccb;
++	int error;
++
++	error = 0;
++	ccb = cdgetccb(periph, CAM_PRIORITY_NORMAL);
++	csio = &ccb->csio;
++
++	cam_fill_csio(csio, 
++		      /* retries */ cd_retry_count, 
++		      /* cbfcnp */ cddone, 
++		      /* flags */ CAM_DIR_IN,
++		      /* tag_action */ MSG_SIMPLE_Q_TAG,
++		      /* data_ptr */ data,
++		      /* dxfer_len */ len,
++		      /* sense_len */ SSD_FULL_SIZE,
++		      sizeof(struct scsi_get_conf),
++ 		      /* timeout */ 50000);
++
++	scsi_cmd = (struct scsi_get_conf *)&csio->cdb_io.cdb_bytes;
++	bzero (scsi_cmd, sizeof(*scsi_cmd));
++	scsi_cmd->op_code = GET_CONFIGURATION;
++	scsi_cmd->byte2 = rt;
++	scsi_ulto2b(startfeature, scsi_cmd->start_feature);
++	scsi_ulto2b(len, scsi_cmd->alloc_len);
++
++	error = cdrunccb(ccb, cderror, /*cam_flags*/CAM_RETRY_SELTO,
++			 /*sense_flags*/SF_RETRY_UA | sense_flags);
++
++	xpt_release_ccb(ccb);
++
++	return(error);
++}
++
++static int
++cdreaddiscinfo(struct cam_periph *periph, uint8_t *data, uint32_t len, 
++	       uint32_t sense_flags)
++{
++	struct scsi_read_disc_info *scsi_cmd;
++        struct ccb_scsiio *csio;
++	union ccb *ccb;
++	int error;
++
++	error = 0;
++	ccb = cdgetccb(periph, CAM_PRIORITY_NORMAL);
++	csio = &ccb->csio;
++
++	cam_fill_csio(csio, 
++		      /* retries */ cd_retry_count, 
++		      /* cbfcnp */ cddone, 
++		      /* flags */ CAM_DIR_IN,
++		      /* tag_action */ MSG_SIMPLE_Q_TAG,
++		      /* data_ptr */ data,
++		      /* dxfer_len */ len,
++		      /* sense_len */ SSD_FULL_SIZE,
++		      sizeof(struct scsi_read_disc_info),
++ 		      /* timeout */ 50000);
++
++	scsi_cmd = (struct scsi_read_disc_info *)&csio->cdb_io.cdb_bytes;
++	bzero (scsi_cmd, sizeof(*scsi_cmd));
++	scsi_cmd->op_code = READ_DISC_INFO;
++	scsi_ulto2b(len, scsi_cmd->alloc_len);
++
++	error = cdrunccb(ccb, cderror, /*cam_flags*/CAM_RETRY_SELTO,
++			 /*sense_flags*/SF_RETRY_UA | sense_flags);
++
++	xpt_release_ccb(ccb);
++
++	return error;
++}
++
++static int
++cdreadtrackinfo(struct cam_periph *periph, uint8_t *data, uint32_t len, 
++	       uint32_t trackno, uint32_t sense_flags)
++{
++	struct scsi_read_track_info *scsi_cmd;
++        struct ccb_scsiio *csio;
++	union ccb *ccb;
++	int error;
++
++	error = 0;
++	ccb = cdgetccb(periph, CAM_PRIORITY_NORMAL);
++	csio = &ccb->csio;
++
++	cam_fill_csio(csio, 
++		      /* retries */ cd_retry_count, 
++		      /* cbfcnp */ cddone, 
++		      /* flags */ CAM_DIR_IN,
++		      /* tag_action */ MSG_SIMPLE_Q_TAG,
++		      /* data_ptr */ data,
++		      /* dxfer_len */ len,
++		      /* sense_len */ SSD_FULL_SIZE,
++		      sizeof(struct scsi_read_track_info),
++ 		      /* timeout */ 50000);
++
++	scsi_cmd = (struct scsi_read_track_info *)&csio->cdb_io.cdb_bytes;
++	bzero (scsi_cmd, sizeof(*scsi_cmd));
++	scsi_cmd->op_code = READ_TRACK_INFO;
++	scsi_cmd->byte2 = READ_TRACK_INFO_AT_TRACK;
++	scsi_ulto4b(trackno, scsi_cmd->address);
++	scsi_ulto2b(len, scsi_cmd->alloc_len);
++
++	error = cdrunccb(ccb, cderror, /*cam_flags*/CAM_RETRY_SELTO,
++			 /*sense_flags*/SF_RETRY_UA | sense_flags);
++
++	xpt_release_ccb(ccb);
++
++	return error;
++}
++/* End of UDF code. */
++
+ static void
+ cdprevent(struct cam_periph *periph, int action)
+ {
+diff --git sys/cam/scsi/scsi_cd.h sys/cam/scsi/scsi_cd.h
+index f502d66..5100fbe 100644
+--- sys/cam/scsi/scsi_cd.h
++++ sys/cam/scsi/scsi_cd.h
+@@ -56,6 +56,108 @@
+  * SCSI command format
+  */
+ 
++/* Used in UDF */
++#define GET_CONFIGURATION 0x46	/* cdrom read TOC */
++struct scsi_get_conf 
++{
++	uint8_t op_code;
++	uint8_t byte2;
++#define GC_RT_ONEFEATURE	0x02 /* Return header and zero or one feature. */
++	uint8_t start_feature[2];
++#define GC_FC_INCR_STREAMING_WRITABLE	0x0021
++	uint8_t reserved[3];
++	uint8_t alloc_len[2];
++	uint8_t control;
++};
++
++struct scsi_get_conf_header
++{
++	uint8_t data_len[4];
++	uint8_t reserved[2];
++	uint8_t cur_profile[2];
++};
++
++struct scsi_get_conf_feature_inc_stream_write
++{
++	uint8_t	feature_code[2];
++	uint8_t	byte3;
++#define GC_CURRENT			0x1
++	uint8_t	additional_len;
++	uint8_t data_block_types_supported[2];
++	uint8_t byte7;
++	uint8_t num_link_sizes;
++	uint8_t first_linksize;
++	uint8_t other_linksizes[1];	/* one byte each, most return 1. */
++};
++
++#define READ_DISC_INFO 0x51
++struct scsi_read_disc_info
++{
++	uint8_t op_code;
++	uint8_t byte2;
++	uint8_t reserved[5];
++	uint8_t alloc_len[2];
++	uint8_t control;
++};
++
++struct scsi_read_disc_info_data
++{
++	uint8_t disc_info_len[2];
++	uint8_t byte2;
++	uint8_t num_first_track;
++	uint8_t num_sessions_lsb;
++	uint8_t first_track_last_session_lsb;
++	uint8_t last_track_last_session_lsb;
++	uint8_t byte8;
++	uint8_t disc_type;
++	uint8_t num_sessions_msb;
++	uint8_t first_track_last_session_msb;
++	uint8_t last_track_last_session_msb;
++	uint8_t disc_id[4];
++	uint8_t leadin_start_last_session[4];
++	uint8_t last_start_time_leadout[4];
++	uint8_t disc_bar_code[8];
++	uint8_t reserved;
++	uint8_t num_opc_entries;
++	uint8_t opc_entries[];
++};
++
++#define READ_TRACK_INFO 0x52
++struct scsi_read_track_info
++{
++	uint8_t op_code;
++	uint8_t byte2;
++#define READ_TRACK_INFO_AT_TRACK	0x01
++	uint8_t address[4];
++	uint8_t reserved;
++	uint8_t alloc_len[2];
++	uint8_t control;
++};
++
++struct scsi_read_track_info_data
++{
++	uint8_t track_info_len[2];
++	uint8_t track_num_lsb;
++	uint8_t session_num_lsb;
++	uint8_t reserved1;
++	uint8_t track_info1;
++	uint8_t track_info2;
++#define READ_TRACK_BLANK		0x40
++	uint8_t valid_data;
++#define READ_TRACK_INFO_LRA_V		0x2
++#define READ_TRACK_INFO_NWA_V		0x1
++	uint8_t track_start_addr[4];
++	uint8_t next_writable_addr[4];
++	uint8_t free_blocks[4];
++	uint8_t packet_size[4];
++	uint8_t track_size[4];
++	uint8_t last_recorded_addr[4];
++	uint8_t track_num_msb;
++	uint8_t session_num_msb;
++	uint8_t reserved2[2];
++};
++/* End of UDF */
++
+ struct scsi_pause
+ {
+ 	u_int8_t op_code;
+diff --git sys/sys/udfio.h sys/sys/udfio.h
+new file mode 100644
+index 0000000..2b823b0
+--- /dev/null
++++ sys/sys/udfio.h
+@@ -0,0 +1,29 @@
++
++
++/* Shared between kernel & process */
++
++#ifndef	_SYS_UDFIO_H_
++#define	_SYS_UDFIO_H_
++
++#ifndef _KERNEL
++#include <sys/types.h>
++#endif
++#include <sys/ioccom.h>
++
++struct udf_session_info {
++	uint16_t num_sessions;
++	uint16_t sector_size;
++	uint16_t num_tracks;
++	uint8_t  first_track;
++
++	uint32_t session_num;
++	uint32_t session_start_addr;
++	uint32_t session_end_addr;
++	uint32_t session_last_written;
++	uint16_t session_first_track;
++	uint8_t  session_first_track_blank;
++	uint16_t session_last_track;
++};
++#define	UDFIOREADSESSIONINFO	_IOWR('c',300, struct udf_session_info)
++
++#endif /* !_SYS_UDFIO_H_ */

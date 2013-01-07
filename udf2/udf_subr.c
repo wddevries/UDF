@@ -501,8 +501,12 @@ udf_retrieve_lvint(struct udf_mount *ump)
 			if (dscr_type == TAGID_TERM)
 				break;		/* clean terminator */
 			if (dscr_type != TAGID_LOGVOL_INTEGRITY) {
+				printf("UDF mount: Invalid logical volume "
+				    "integrity sequence entry found.\n");
+#if 0
 				/* fatal... corrupt disc */
 				error = ENOENT;
+#endif
 				break;
 			}
 			if (lvint)
@@ -529,10 +533,11 @@ udf_retrieve_lvint(struct udf_mount *ump)
 	if (error != 0 && lvint != NULL) {
 		free(lvint, M_UDFTEMP);
 		lvint = NULL;
-	}
-
-	if (lvint == NULL)
+	} else if (lvint == NULL) {
+		printf("UDF mount: No logical volume integrity sequence entries"
+		    " found.\n");
 		error = ENOENT;
+	}
 
 	ump->logvol_integrity = lvint;
 
