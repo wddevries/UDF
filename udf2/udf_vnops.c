@@ -757,9 +757,9 @@ udf_getattr(struct vop_getattr_args *ap)
 	}
 
 	/* do the uid/gid translation game */
-	if (uid == (uid_t) - 1)
+	if (uid == (uid_t)-1)
 		uid = ump->anon_uid;
-	if (gid == (gid_t) - 1)
+	if (gid == (gid_t)-1)
 		gid = ump->anon_gid;
 
 	/*

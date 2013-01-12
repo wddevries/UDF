@@ -327,8 +327,12 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 		mp->mnt_iosize_max = MAXPHYS;
 	MNT_ILOCK(mp);
 	mp->mnt_flag |= MNT_LOCAL;
+#if __FreeBSD__ < 10
 	mp->mnt_kern_flag |= MNTK_MPSAFE | MNTK_LOOKUP_SHARED |
 		MNTK_EXTENDED_SHARED;
+#else
+	mp->mnt_kern_flag |= MNTK_LOOKUP_SHARED | MNTK_EXTENDED_SHARED;
+#endif
 	MNT_IUNLOCK(mp);
 
 	ump = malloc(sizeof(struct udf_mount), M_UDFTEMP, M_WAITOK | M_ZERO);
