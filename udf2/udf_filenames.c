@@ -32,7 +32,6 @@
 #include "ecma167-udf.h"
 #include "udf.h"
 #include "udf_subr.h"
-#include "udf_mount.h"
 
 extern struct iconv_functions *udf2_iconv;
 

@@ -39,7 +39,6 @@
 #include "ecma167-udf.h"
 #include "udf.h"
 #include "udf_subr.h"
-#include "udf_mount.h"
 
 #define VTOI(vnode) ((struct udf_node *) (vnode)->v_data)
 

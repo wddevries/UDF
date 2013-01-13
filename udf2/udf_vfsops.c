@@ -40,6 +40,7 @@
 #include <sys/module.h>
 #include <sys/priv.h>
 #include <sys/iconv.h>
+#include <sys/stat.h>
 #if 0
 #include <sys/udfio.h>
 #endif
@@ -49,7 +50,6 @@
 #include "ecma167-udf.h"
 #include "udf.h"
 #include "udf_subr.h"
-#include "udf_mount.h"
 
 MALLOC_DEFINE(M_UDFTEMP, "UDF temp", "UDF allocation space");
 uma_zone_t udf_zone_node = NULL;
@@ -303,7 +303,7 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 #endif
 	int error, len, num_anchors;
 	uint32_t bshift, logvol_integrity, numsecs; /*lb_size,*/
-	char *cs_disk, *cs_local;
+	char *cs_local;
 	void *optdata = NULL;
 
 	/* Open a consumer. */
@@ -353,20 +353,43 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 	ump->geomcp = cp;
 
 	/* read in options */
-	
-	error = vfs_getopt(mp->mnt_optnew, "anon_uid", &optdata, &len);
-	if (error != 0 || len != sizeof(int)) {
+	error = vfs_getopt(mp->mnt_optnew, "uid", &optdata, &len);
+	if (error != 0 || len != sizeof(uid_t)) {
 		error = EINVAL;
 		goto fail;
 	}
 	ump->anon_uid = *(uid_t *)optdata;
 
-	error = vfs_getopt(mp->mnt_optnew, "anon_gid", &optdata, &len);
-	if (error != 0 || len != sizeof(int)) {
+	vfs_flagopt(mp->mnt_optnew, "override_uid", &ump->flags,
+	    UDFMNT_OVERRIDE_UID); 
+
+	error = vfs_getopt(mp->mnt_optnew, "gid", &optdata, &len);
+	if (error != 0 || len != sizeof(gid_t)) {
 		error = EINVAL;
 		goto fail;
 	}
 	ump->anon_gid = *(gid_t *)optdata;
+
+	vfs_flagopt(mp->mnt_optnew, "override_gid", &ump->flags,
+	    UDFMNT_OVERRIDE_GID); 
+
+	if (vfs_getopt(mp->mnt_optnew, "mode", &optdata, &len) == 0) {
+		if (len != sizeof(mode_t)) {
+			error = EINVAL;
+			goto fail;
+		}
+		ump->mode = *(gid_t *)optdata & ALLPERMS;
+		ump->flags |= UDFMNT_USE_MASK;
+	}
+	
+	if (vfs_getopt(mp->mnt_optnew, "dirmode", &optdata, &len) == 0) {
+		if (len != sizeof(mode_t)) {
+			error = EINVAL;
+			goto fail;
+		}
+		ump->dirmode = *(gid_t *)optdata & ALLPERMS;
+		ump->flags |= UDFMNT_USE_DIRMASK;
+	}
 
 #if 0
 	printf("si_name: %s\n", devvp->v_rdev->si_name);
@@ -433,20 +456,17 @@ udf_mountfs(struct vnode *devvp, struct mount *mp)
 		ump->first_possible_vat_location = ump->session_start;
 	ump->last_possible_vat_location = ump->session_last_written;
 
-	ump->flags = 0;
-	cs_local = NULL;
-	error = vfs_getopt(mp->mnt_optnew, "cs_local", 
-	    (void **)&cs_local, &len);
+	error = vfs_getopt(mp->mnt_optnew, "cs_local", (void **)&cs_local,
+	    &len);
 	if (error == 0 && udf2_iconv != NULL) {
-		ump->flags = UDFMNT_KICONV;
-		cs_disk = "UTF-16BE";
+		ump->flags |= UDFMNT_KICONV;
 
 		if (cs_local[len-1] != '\0') {
 			error = EINVAL;
 			goto fail;
 		}
 
-		udf2_iconv->open(cs_local, cs_disk, &ump->iconv_d2l);
+		udf2_iconv->open(cs_local, "UTF-16BE", &ump->iconv_d2l);
 	}
 
 	/* inspect sector size */

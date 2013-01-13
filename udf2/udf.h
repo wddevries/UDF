@@ -72,6 +72,13 @@
 #define UDF_UPDATE_TRACKINFO	  0x01	/* update trackinfo and re-shedule   */
 #define UDF_REMAP_BLOCK		  0x02	/* remap the failing block length    */
 
+/* mounting options */
+#define UDFMNT_KICONV 		0x1
+#define UDFMNT_OVERRIDE_UID	0x2
+#define UDFMNT_OVERRIDE_GID	0x4
+#define UDFMNT_USE_MASK		0x8
+#define UDFMNT_USE_DIRMASK	0x16
+
 /* malloc pools */
 MALLOC_DECLARE(M_UDFTEMP);
 
@@ -89,10 +96,12 @@ struct udf_mount {
 	struct vnode		*devvp;	
 	struct g_consumer	*geomcp;
 	uint32_t		 sector_size;
-	int			 flags;
+	uint64_t		 flags;
 	uid_t			 anon_uid;
 	gid_t			 anon_gid;
 	void			*iconv_d2l;		/* disk to local */
+	mode_t			 mode;
+	mode_t			 dirmode;
 
 	/* Used in mounting */
 	uint32_t		 first_trackblank;

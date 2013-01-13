@@ -63,10 +63,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <pwd.h>
+#include <grp.h>
 
 #include "mntopts.h"
-#include "../udf2/udf_mount.h"
-
 
 struct mntopt mopts[] = {
 	MOPT_STDOPTS,
@@ -77,8 +76,11 @@ struct mntopt mopts[] = {
 static void	get_session_info(char *dev, struct udf_session_info *usi, 
    		    int session_num);
 static void	print_session_info(char *dev, int session_num);
-static int	set_charset(char *, char *, const char *);
+static int	set_charset(char *, const char *);
 static void	usage(void);
+static int	get_uid(char *u, uid_t *uid);
+static int	get_gid(char *g, gid_t *gid);
+static int	get_mode(char *m, mode_t *mode);
 
 int
 main(int argc, char **argv)
@@ -87,35 +89,54 @@ main(int argc, char **argv)
 	struct iovec *iov;
 	struct passwd *nobody;
 	long session_num;
-	gid_t gid;
-	int iovlen, ch, mntflags, opts, sessioninfo, verbose;
-	int nobody_gid, nobody_uid;
-	int32_t first_trackblank;
-	uid_t uid;
-	char cs_disk[ICONV_CSNMAXLEN], cs_local[ICONV_CSNMAXLEN];
+	gid_t anon_gid, override_gid;
+	int iovlen, ch, mntflags, opts, sessioninfo;
+	uid_t anon_uid, override_uid;
+	mode_t mode, dirmode;
+	char cs_local[ICONV_CSNMAXLEN];
 	char *dev, *dir, *endp, mntpath[MAXPATHLEN];
+	uint8_t use_nobody_gid, use_nobody_uid;
+	uint8_t use_override_gid, use_override_uid;
+	uint8_t use_mode, use_dirmode;
 
-	cs_disk[0] = cs_local[0] = '\0';
+	cs_local[0] = '\0';
 	session_num = 0;
 	sessioninfo = 0;
-	gid = 0;
-	uid = 0;
-	nobody_uid = 1;
-	nobody_gid = 1;
+	use_nobody_uid = use_nobody_gid = 1;
+	use_override_uid = use_override_gid = 0;
+	use_mode = use_dirmode = 0;
 	iov = NULL;
 	iovlen = 0;
-	mntflags = opts = verbose = 0;
+	mntflags = opts = 0;
 
-	while ((ch = getopt(argc, argv, "C:G:o:ps:U:v")) != -1)
+	while ((ch = getopt(argc, argv, "C:G:g:M:m:o:ps:U:u:")) != -1)
 		switch (ch) {
 		case 'C':
-			set_charset(cs_disk, cs_local, optarg);
+			set_charset(cs_local, optarg);
 			break;
 		case 'G':
-			gid = strtol(optarg, &endp, 10);
-			if (optarg == endp || *endp != '\0')
-				usage();	
-			nobody_gid = 0;
+			if (get_gid(optarg, &anon_gid) == -1)
+				errx(EX_USAGE, "invalid gid in option G: %s", 
+				    optarg);
+			use_nobody_gid = 0;
+			break;
+		case 'g':
+			if (get_gid(optarg, &override_gid) == -1)
+				errx(EX_USAGE, "invalid gid in option g: %s", 
+				    optarg);
+			use_override_gid = 1;
+			break;
+		case 'M':
+			if (get_mode(optarg, &dirmode) == -1)
+				errx(EX_USAGE, "invalid mode in option M: %s", 
+				    optarg);
+			use_dirmode = 1;
+			break;
+		case 'm':
+			if (get_mode(optarg, &mode) == -1)
+				errx(EX_USAGE, "invalid mode in option m: %s", 
+				    optarg);
+			use_mode = 1;
 			break;
 		case 'o':
 			getmntopts(optarg, mopts, &mntflags, &opts);
@@ -126,16 +147,20 @@ main(int argc, char **argv)
 		case 's':
 			session_num = strtol(optarg, &endp, 10);
 			if (optarg == endp || *endp != '\0')
-				usage();	
+				errx(EX_USAGE, "invalid number in option s: %s", 
+				    optarg);
 			break;
 		case 'U':
-			uid = strtol(optarg, &endp, 10);
-			if (optarg == endp || *endp != '\0')
-				usage();	
-			nobody_uid = 0;
+			if (get_uid(optarg, &anon_uid) == -1)
+				errx(EX_USAGE, "invalid uid in option U: %s", 
+				    optarg);
+			use_nobody_uid = 0;
 			break;
-		case 'v':
-			verbose++;
+		case 'u':
+			if (get_uid(optarg, &override_uid) == -1)
+				errx(EX_USAGE, "invalid uid in option u: %s", 
+				    optarg);
+			use_override_uid = 1;
 			break;
 		case '?':
 		default:
@@ -172,28 +197,37 @@ main(int argc, char **argv)
 	/*
 	 * Use nobody for uid and gid if not given above. 
 	 */
-	if (nobody_gid == 1 || nobody_uid == 1) {
-		nobody = getpwnam("nobody");
-		if (nobody == NULL)
-			errx(EX_USAGE, "There is no entry for 'nobody'. Please "
-			    "use the G and U options to specify defaults for "
-			    "uid and gid.");
-	}
-	if (nobody_gid == 1)
-		gid = nobody->pw_gid;
-	if (nobody_uid == 1)
-		uid = nobody->pw_uid;
+	if (use_nobody_gid == 1 && use_override_gid == 0) {
+		if (get_gid("nobody", &anon_gid) == -1)
+			errx(EX_USAGE, "There is no group 'nobody'; use the G "
+			    "option to specify a default gid.");
+	} else if (use_override_gid == 1)
+		anon_gid = override_gid;
 
-	/*
-	 * UDF file systems are not writeable.
-	 */
+	if (use_nobody_uid == 1 && use_override_uid == 0) {
+		if (get_uid("nobody", &anon_uid) == -1)
+			errx(EX_USAGE, "There is no user 'nobody'; use the U "
+			    "option to specify a default uid.");
+	} else if (use_override_uid == 1)
+		anon_uid = override_uid;
+
+	/* UDF file systems are not writeable. */
 	mntflags |= MNT_RDONLY;
 
 	build_iovec(&iov, &iovlen, "fstype", "udf2", (size_t) - 1);
 	build_iovec(&iov, &iovlen, "fspath", mntpath, (size_t) - 1);
 	build_iovec(&iov, &iovlen, "from", dev, (size_t) - 1);
-	build_iovec(&iov, &iovlen, "anon_uid", &uid, sizeof(uid));
-	build_iovec(&iov, &iovlen, "anon_gid", &gid, sizeof(gid));
+	build_iovec(&iov, &iovlen, "uid", &anon_uid, sizeof(anon_uid));
+	if (use_override_uid == 1)
+		build_iovec(&iov, &iovlen, "override_uid", NULL, 0);
+	build_iovec(&iov, &iovlen, "gid", &anon_gid, sizeof(anon_gid));
+	if (use_override_gid == 1)
+		build_iovec(&iov, &iovlen, "override_gid", NULL, 0);
+	if (use_mode)
+		build_iovec(&iov, &iovlen, "mode", &mode, sizeof(mode_t));
+	if (use_dirmode)
+		build_iovec(&iov, &iovlen, "dirmode", &dirmode, sizeof(mode_t));
+
 	build_iovec(&iov, &iovlen, "first_trackblank", 
 	    &usi.session_first_track_blank, sizeof(uint8_t));
 	build_iovec(&iov, &iovlen, "session_start_addr",
@@ -204,7 +238,6 @@ main(int argc, char **argv)
 	    &usi.session_last_written, sizeof(uint32_t));
 
 	if (cs_local[0] != '\0') {
-		build_iovec(&iov, &iovlen, "cs_disk", cs_disk, (size_t) - 1);
 		build_iovec(&iov, &iovlen, "cs_local", cs_local, (size_t) - 1);
 	}
 
@@ -216,7 +249,56 @@ main(int argc, char **argv)
 }
 
 static int
-set_charset(char *cs_disk, char *cs_local, const char *localcs)
+get_uid(char *u, uid_t *uid)
+{
+	struct passwd *usr;
+	char *endp;
+
+	usr = getpwnam(u);
+	if (usr != NULL)
+		*uid = usr->pw_gid;
+	else {
+		*uid = strtoul(u, &endp, 10);
+
+		if (u == endp || *endp != '\0')
+			return (-1);	
+	}
+
+	return (0);
+}
+
+static int
+get_gid(char *g, gid_t *gid)
+{
+	struct group *grp;
+	char *endp;
+
+	grp = getgrnam(g);
+	if (grp != NULL)
+		*gid = grp->gr_gid;
+	else {
+		*gid = strtoul(g, &endp, 10);
+
+		if (g == endp || *endp != '\0')
+			return (-1);	
+	}
+
+	return (0);
+}
+
+static int
+get_mode(char *m, mode_t *mode) 
+{
+	char *endp;
+
+	*mode = strtoul(m, &endp, 8);	
+	if (m == endp || *endp != '\0')
+		return (-1);	
+	return (0);
+}
+
+static int
+set_charset(char *cs_local, const char *localcs)
 {
 	int error;
 
@@ -226,9 +308,8 @@ set_charset(char *cs_disk, char *cs_local, const char *localcs)
 			    "kernel module");
 		}
 
-	strncpy(cs_disk, ENCODING_UNICODE, ICONV_CSNMAXLEN);
 	strncpy(cs_local, localcs, ICONV_CSNMAXLEN);
-	error = kiconv_add_xlat16_cspairs(cs_disk, cs_local);
+	error = kiconv_add_xlat16_cspairs(ENCODING_UNICODE, cs_local);
 	if (error != 0)
 		err(EX_OSERR, "udf2_iconv");
 

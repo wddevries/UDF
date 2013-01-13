@@ -41,6 +41,7 @@
 #include <sys/dirent.h>
 #include <sys/unistd.h>
 #include <sys/bio.h>
+#include <sys/stat.h>
 
 #if __FreeBSD__ < 10
 #include <fs/fifofs/fifo.h>
@@ -757,9 +758,9 @@ udf_getattr(struct vop_getattr_args *ap)
 	}
 
 	/* do the uid/gid translation game */
-	if (uid == (uid_t)-1)
+	if (uid == (uid_t)-1 || ump->flags & UDFMNT_OVERRIDE_UID)
 		uid = ump->anon_uid;
-	if (gid == (gid_t)-1)
+	if (gid == (gid_t)-1 || ump->flags & UDFMNT_OVERRIDE_GID)
 		gid = ump->anon_gid;
 
 	/*
@@ -781,6 +782,11 @@ udf_getattr(struct vop_getattr_args *ap)
 	vattr_null(vap);
 	vap->va_type = vp->v_type;
 	vap->va_mode = udf_getaccessmode(udf_node);
+	if (vap->va_type == VDIR && ump->flags & UDFMNT_USE_DIRMASK) {
+		vap->va_mode = (vap->va_mode & ~ALLPERMS) | ump->dirmode;
+	} else if (ump->flags & UDFMNT_USE_MASK) {
+		vap->va_mode = (vap->va_mode & ~ALLPERMS) | ump->mode;
+	}
 	vap->va_nlink = nlink;
 	vap->va_uid = uid;
 	vap->va_gid = gid;
@@ -951,6 +957,11 @@ udf_access(struct vop_access_args *ap)
 	}
 
 	mode = udf_getaccessmode(udf_node);
+	if (vp->v_type == VDIR && udf_node->ump->flags & UDFMNT_USE_DIRMASK) {
+		mode = (mode & ~ALLPERMS) | udf_node->ump->dirmode;
+	} else if (udf_node->ump->flags & UDFMNT_USE_MASK) {
+		mode = (mode & ~ALLPERMS) | udf_node->ump->mode;
+	}
 
 	if (udf_node->fe != NULL) {
 		uid = udf_node->fe->uid;

@@ -26,7 +26,7 @@
 .\"
 .\" $FreeBSD: src/sbin/mount_udf/mount_udf.8,v 1.6 2005/02/10 09:19:31 ru Exp $
 .\"
-.Dd June 12, 2012
+.Dd January 13, 2013
 .Dt MOUNT_UDF2 8
 .Os
 .Sh NAME
@@ -34,10 +34,15 @@
 .Nd mount a UDF file system
 .Sh SYNOPSIS
 .Nm
-.Op Fl v
 .Op Fl o Ar options
 .Op Fl C Ar charset
+.Op Fl G Ar gid
+.Op Fl g Ar gid
+.Op Fl M Ar permissions
+.Op Fl m Ar permissions
 .Op Fl s Ar session 
+.Op Fl U Ar uid
+.Op Fl u Ar uid
 .Ar special node
 .Nm
 .Op Fl p
@@ -47,7 +52,7 @@
 The
 .Nm
 utility attaches the UDF file system residing on the device
-.Ar special
+.Pa special
 to the global file system namespace at the location indicated by
 .Ar node .
 .Pp
@@ -55,11 +60,31 @@ The options are as follows:
 .Bl -tag -width indent
 .It Fl C Ar charset
 Specify local
-.It Fl G Ar gid
-Set the group of anonymous files on the file system.  The default group is the
-nobody group.
 .Ar charset
-to convert Unicode file names.
+to convert Unicode file names.  By default UDF-8 is used.
+.It Fl G Ar gid
+Set the group used for files and directories without defined groups to 
+.Ar gid .
+By default this is set to the 'nobody' group.  (UDF allows for files 
+and directories without groups.)
+.It Fl g Ar gid
+Set the group for all files and directories in the file system to 
+.Ar gid .
+If this option is specified, the
+.Fl G
+option has no effect.
+.It Fl M Ar permissions
+Set the absolute mode used for all directories in the file system to 
+.Ar permissions .
+This value should be specified as an octal number according to the rules in 
+chmod(1).
+.It Fl m Ar permissions
+Set the absolute mode used for all files in the file system to 
+.Ar permissions .
+If the
+.Fl M
+option is not specified, all directories will also set to this value. This value
+should be specified as an octal number according to the rules in chmod(1).
 .It Fl o
 Options are specified with a
 .Fl o
@@ -67,7 +92,6 @@ flag followed by a comma separated string of options.
 See the
 .Xr mount 8
 man page for possible options and their meanings.
-The following UDF specific options are available:
 .It Fl p
 Print information about sessions on cd.  This option may be used to determine
 the number of sessions on the disk.  Sessions are numbered starting with 1, and
@@ -81,10 +105,17 @@ determined using the
 .Fl p
 option.
 .It Fl U Ar uid
-Set the owner of anonymous files on the file system.  The default owner is the
-user nobody.
-.It Fl v
-Be verbose about mounting the UDF file system.
+Set the user used for files and directories without defined owners to 
+.Ar uid .
+By default this is set to the user 'nobody'.  (UDF allows for files 
+and directories without owners.)
+.It Fl u Ar uid
+Set the owner for all files and directories in the file system to 
+.Ar uid .
+If this option is specified, the
+.Fl U
+option has no effect.
+
 .El
 .Sh SEE ALSO
 .Xr cdcontrol 1 ,
