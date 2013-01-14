@@ -12,7 +12,7 @@ index 1984eac..f8f8bff 100644
  	};
  
 diff --git sys/cam/scsi/scsi_cd.c sys/cam/scsi/scsi_cd.c
-index d5d7156..25a26fb 100644
+index d5d7156..61274fd 100644
 --- sys/cam/scsi/scsi_cd.c
 +++ sys/cam/scsi/scsi_cd.c
 @@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
@@ -63,7 +63,7 @@ index d5d7156..25a26fb 100644
  	default:
  		cam_periph_lock(periph);
  		error = cam_periph_ioctl(periph, cmd, addr, cderror);
-@@ -2847,6 +2874,249 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
+@@ -2847,6 +2874,248 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
  	return (error);
  }
  
@@ -75,11 +75,11 @@ index d5d7156..25a26fb 100644
 +	struct scsi_read_track_info_data *ti;
 +	struct scsi_get_conf_header *gch;
 +	struct scsi_get_conf_feature_inc_stream_write *lf;
++	int error, linksize, lra_valid, nwa_valid, diskstate;
++	int sessionstatus;
 +	uint32_t track_start_addr, track_size, free_blocks, nwa, lra;
 +	uint16_t track, sessret;
 +	uint8_t lsb, msb;
-+	int error, linksize, lra_valid, nwa_valid, diskstate;
-+	int sessionstatus;
 +
 +	rdi = malloc(sizeof(*rdi), M_SCSICD, M_WAITOK | M_ZERO);
 +	ti = malloc(sizeof(*ti), M_SCSICD, M_WAITOK | M_ZERO);
@@ -160,8 +160,7 @@ index d5d7156..25a26fb 100644
 +			lra = scsi_4btoul(ti->last_recorded_addr);
 +			nwa_valid = ti->valid_data & READ_TRACK_INFO_NWA_V;
 +			nwa =  scsi_4btoul(ti->next_writable_addr);
-+		} 
-+		else if (usi->session_first_track != 0)
++		} else if (usi->session_first_track != 0)
 +			break;
 +	}
 +	
@@ -191,7 +190,7 @@ index d5d7156..25a26fb 100644
 +	free(ti, M_SCSICD);
 +	free(gch, M_SCSICD);
 +
-+	return error;
++	return (error);
 +}
 +
 +static int 
@@ -230,7 +229,7 @@ index d5d7156..25a26fb 100644
 +
 +	xpt_release_ccb(ccb);
 +
-+	return(error);
++	return (error);
 +}
 +
 +static int
@@ -267,7 +266,7 @@ index d5d7156..25a26fb 100644
 +
 +	xpt_release_ccb(ccb);
 +
-+	return error;
++	return (error);
 +}
 +
 +static int
@@ -306,7 +305,7 @@ index d5d7156..25a26fb 100644
 +
 +	xpt_release_ccb(ccb);
 +
-+	return error;
++	return (error);
 +}
 +/* End of UDF code. */
 +
