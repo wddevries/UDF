@@ -12,7 +12,7 @@ index 1984eac..f8f8bff 100644
  	};
  
 diff --git sys/cam/scsi/scsi_cd.c sys/cam/scsi/scsi_cd.c
-index d5d7156..61274fd 100644
+index d5d7156..8914fe8 100644
 --- sys/cam/scsi/scsi_cd.c
 +++ sys/cam/scsi/scsi_cd.c
 @@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
@@ -63,7 +63,7 @@ index d5d7156..61274fd 100644
  	default:
  		cam_periph_lock(periph);
  		error = cam_periph_ioctl(periph, cmd, addr, cderror);
-@@ -2847,6 +2874,248 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
+@@ -2847,6 +2874,251 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
  	return (error);
  }
  
@@ -189,6 +189,9 @@ index d5d7156..61274fd 100644
 +	free(rdi, M_SCSICD);
 +	free(ti, M_SCSICD);
 +	free(gch, M_SCSICD);
++
++	if (error != 0)
++		error = ENODEV;
 +
 +	return (error);
 +}

@@ -334,9 +334,17 @@ get_session_info(char *dev, struct udf_session_info *usi, int session_num)
 			errx(EX_USAGE, "Cannot mount selected session.  This "
 			    "device does not properly support multi-sessions "
 			    "disc.");
-		
-		warnx("Warning, this device does not properly support "
-		    "multi-sessions disc.");
+
+		/* Other fatal errors besides EIO and ENXIO may exist, but 
+		trying to mount an invalid device shouldn't result in anything 
+		to bad. */ 
+		if (errno == EIO)
+			errx(EX_IOERR, "Device not ready.");
+		else if (errno == ENXIO)
+			errx(EX_IOERR, "No media present.");
+		else
+			warnx("Warning, this device does not properly support "
+			    "multi-sessions disc.");
 
 		/* We populate the end address inside the kernel. */
 		usi->session_start_addr = 0;
