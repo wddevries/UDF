@@ -165,7 +165,7 @@ udf_read(struct vop_read_args *ap)
 		n = min(sector_size - on, uio->uio_resid);
 		n = min(n, fsize - uio->uio_offset);
 
-		error = bread(vp, lbn, sector_size, NOCRED, &bp);
+		error = bread(vp, lbn, 2 * sector_size, NOCRED, &bp);
 		n = min(n, sector_size - bp->b_resid);
 
 		if (error == 0) 
@@ -343,7 +343,8 @@ udf_strategy(struct vop_strategy_args *ap)
 
 	if ((bp->b_iocmd & BIO_READ) == 0)
 		return (ENOTSUP);
-
+printf("bcount: %ld, resid: %ld, bufsize: %ld\n", bp->b_bcount, bp->b_resid,
+bp->b_bufsize);
 	/* get sector size */
 	sector_size = udf_node->ump->sector_size;
 
