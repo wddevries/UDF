@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2012 Will DeVries
+ * Copyright (c) 2013 Will DeVries
  * Copyright (c) 2006, 2008 Reinoud Zandijk
  * All rights reserved.
  * 
@@ -43,6 +43,11 @@
 #include <sys/bio.h>
 #include <sys/stat.h>
 
+#include <vm/vm.h>
+#include <vm/vm_page.h>
+#include <vm/vm_object.h>
+#include <vm/vm_pager.h>
+
 #if __FreeBSD__ < 10
 #include <fs/fifofs/fifo.h>
 #endif
@@ -50,6 +55,8 @@
 #include "ecma167-udf.h"
 #include "udf.h"
 #include "udf_subr.h"
+
+static int udf_pbuf_freecnt = -1;
 
 static vop_access_t	udf_access;
 static vop_bmap_t       udf_bmap;
@@ -66,6 +73,7 @@ static vop_reclaim_t    udf_reclaim;
 static vop_setattr_t    udf_setattr;
 static vop_strategy_t   udf_strategy;
 static vop_vptofh_t     udf_vptofh;
+static vop_getpages_t	udf_getpages;
 
 static struct vop_vector udf_vnodeops = {
 	.vop_default =		&default_vnodeops,
@@ -85,6 +93,7 @@ static struct vop_vector udf_vnodeops = {
 	.vop_reclaim =		udf_reclaim,
 	.vop_vptofh =		udf_vptofh,
 	.vop_lookup =		vfs_cache_lookup,
+	.vop_getpages =		udf_getpages
 };
 
 struct vop_vector udf_fifoops = {
@@ -133,7 +142,7 @@ udf_read(struct vop_read_args *ap)
 	struct buf *bp;
 	struct udf_node *udf_node = VTOI(vp);
 	uint64_t fsize;
-	int lbn, n, on, sector_size; 
+	int seqcount, lbn, n, on, sector_size; 
 	int error = 0;
 	uint8_t *zerobuf;
 
@@ -157,7 +166,8 @@ udf_read(struct vop_read_args *ap)
 
 	sector_size = udf_node->ump->sector_size;
 
-	/* read contents using buffercache */
+	seqcount = ap->a_ioflag >> IO_SEQSHIFT;
+
 	while (error == 0 && uio->uio_resid > 0 && fsize > uio->uio_offset) {
  		lbn = uio->uio_offset / sector_size;
 		on = uio->uio_offset % sector_size;
@@ -165,7 +175,14 @@ udf_read(struct vop_read_args *ap)
 		n = min(sector_size - on, uio->uio_resid);
 		n = min(n, fsize - uio->uio_offset);
 
-		error = bread(vp, lbn, sector_size, NOCRED, &bp);
+		if ((vp->v_mount->mnt_flag & MNT_NOCLUSTERR) == 0 &&
+		    sector_size * (lbn + 1) < fsize) {
+			error = cluster_read(vp, fsize, lbn, sector_size, 
+			    NOCRED, uio->uio_resid, seqcount, &bp);
+		} else {
+			error = bread(vp, lbn, sector_size, NOCRED, &bp);
+		}
+
 		n = min(n, sector_size - bp->b_resid);
 
 		if (error == 0) 
@@ -187,11 +204,6 @@ udf_read(struct vop_read_args *ap)
 	return (error);
 }
 
-#if 0
-/* b_lblkno value passed into strategy as a result of the bmap function does not
-appear to be set to valid values, so don't use it.  Since b_blkno seems correct,
-everything is based on it. */
-
 static int
 udf_bmap(struct vop_bmap_args /* {
 		struct vnode *a_vp;
@@ -210,7 +222,6 @@ udf_bmap(struct vop_bmap_args /* {
 
 	if (ap->a_bop != NULL)
 		*ap->a_bop = &ap->a_vp->v_bufobj;
-		//*ap->a_bop = &udf_node->ump->devvp->v_bufobj;
 
 	if (ap->a_bnp == NULL)
 		return (0);
@@ -223,16 +234,15 @@ udf_bmap(struct vop_bmap_args /* {
 
 	/* convert to dev blocks */
 	if (exttype == UDF_TRAN_INTERN)
-		*ap->a_bnp = -2;
-		//return (EOPNOTSUPP);
+		*ap->a_bnp = INT64_MAX - 2;
 	else if (exttype == UDF_TRAN_ZERO)
-		*ap->a_bnp = -1; /* zero the buffer */
+		*ap->a_bnp = INT64_MAX - 1; /* zero the buffer */
 	else
 		*ap->a_bnp = lsector * (udf_node->ump->sector_size/DEV_BSIZE);
 
 	/* set runlength of maximum block size */
 	if (ap->a_runp != NULL)
-		*ap->a_runp = 0;
+		*ap->a_runp = maxblks - 1;
 
 	if (ap->a_runb != NULL) 
 		*ap->a_runb = 0;
@@ -260,7 +270,6 @@ udf_strategy(struct vop_strategy_args *ap)
 
 
 	/* get logical block and run */
-	printf("%ld:%ld ", bp->b_blkno, bp->b_lblkno);
 	if (bp->b_blkno == bp->b_lblkno) {
 		error = udf_bmap_translate(udf_node, bp->b_lblkno, &exttype,
 		    &lsector, &maxblks);
@@ -273,11 +282,11 @@ udf_strategy(struct vop_strategy_args *ap)
 		}
 
 		if (exttype == UDF_TRAN_ZERO) {
-			bp->b_blkno = -1;
+			bp->b_blkno = INT64_MAX - 1;
 			vfs_bio_clrbuf(bp);
 		}
 		else if (exttype == UDF_TRAN_INTERN)
-			bp->b_blkno = -2;
+			bp->b_blkno = INT64_MAX - 2;
 		else
 			bp->b_blkno = lsector * (sector_size / DEV_BSIZE);
 	}
@@ -285,11 +294,10 @@ udf_strategy(struct vop_strategy_args *ap)
 	if ((bp->b_iocmd & BIO_READ) == 0)
 		return (ENOTSUP);
 
-	if (bp->b_blkno == -1) {
+	if (bp->b_blkno == INT64_MAX - 1) {
 		bufdone(bp);
-		printf("UDF: Hole in file found. (This is a debuging statement,"
-		    "not an error.\n");
-	} else if (bp->b_blkno == -2) {
+//printf("UDF: Hole in file found. (This is a debuging statement, not an error.\n");
+	} else if (bp->b_blkno == INT64_MAX - 2) {
 		error = udf_read_internal(udf_node, (uint8_t *)bp->b_data);
 		if (error != 0) {
 			bp->b_error = error;
@@ -297,83 +305,6 @@ udf_strategy(struct vop_strategy_args *ap)
 		}
 		bufdone(bp);
 	} else {
-		bp->b_iooffset = dbtob(bp->b_blkno);
-		BO_STRATEGY(bo, bp);
-	}
-
-	return (bp->b_error);
-}
-#endif
-
-static int
-udf_bmap(struct vop_bmap_args /* {
-		struct vnode *a_vp;
-		daddr_t  a_bn;
-		struct bufobj **a_bop;
-		daddr_t *a_bnp;
-		int *a_runp;
-		int *a_runb;
-	} */ *ap)
-{
-
-	if (ap->a_bop != NULL)
-		*ap->a_bop = &ap->a_vp->v_bufobj;
-	if (ap->a_bnp != NULL)
-		*ap->a_bnp = ap->a_bn;
-	if (ap->a_runp != NULL)
-		*ap->a_runp = 0;
-	if (ap->a_runb != NULL)
-		*ap->a_runb = 0;
-	return (0);
-}
-
-static int
-udf_strategy(struct vop_strategy_args *ap)
-{
-	struct vnode *vp = ap->a_vp;
-	struct buf *bp = ap->a_bp;
-	struct udf_node *udf_node = VTOI(vp);
-	struct bufobj *bo = &udf_node->ump->devvp->v_bufobj;
-	uint64_t lsector;
-	int error, exttype;
-	uint32_t sector_size, maxblks;
-
-	if (vp->v_type == VBLK || vp->v_type == VCHR)
-		panic("udf_strategy: spec");
-
-	if ((bp->b_iocmd & BIO_READ) == 0)
-		return (ENOTSUP);
-
-	/* get sector size */
-	sector_size = udf_node->ump->sector_size;
-
-	/* get logical block and run */
-	error = udf_bmap_translate(udf_node, bp->b_blkno, &exttype,
-	    &lsector, &maxblks);
-	if (error != 0) {
-		bp->b_error = error;
-		bp->b_ioflags |= BIO_ERROR;
-		bufdone(bp);
-		return (error);
-	}
-
-	if (exttype == UDF_TRAN_ZERO) {
-		bp->b_blkno = -1;
-		vfs_bio_clrbuf(bp);
-		bufdone(bp);
-		printf("UDF: Hole in file found. (This is a debuging statement,"
-		    "not an error.\n");
-	}
-	else if (exttype == UDF_TRAN_INTERN){
-		error = udf_read_internal(udf_node, (uint8_t *)bp->b_data);
-		if (error != 0) {
-			bp->b_error = error;
-			bp->b_ioflags |= BIO_ERROR;
-		}
-		bufdone(bp);
-	}
-	else {
-		bp->b_blkno = lsector * (sector_size / DEV_BSIZE);
 		bp->b_iooffset = dbtob(bp->b_blkno);
 		BO_STRATEGY(bo, bp);
 	}
@@ -1155,5 +1086,189 @@ udf_vptofh(struct vop_vptofh_args *ap)
 	ufid->ino = udf_node->hash_id;
 
 	return (0);
+}
+
+static int
+udf_getpages(struct vop_getpages_args /* {
+		struct vnode *a_vp;
+		vm_page_t *a_m;
+		int a_count;
+		int a_reqpage;
+		vm_ooffset_t a_offset;
+	} */ *ap)
+{
+	struct buf *bp;
+	struct bufobj *bo;
+	struct vnode *vp = ap->a_vp;
+	vm_page_t *pages;
+	daddr_t startreq, lastreq, firstblk, vblock, address;
+	off_t filesize, foff, tfoff;
+	vm_offset_t kva, curdata;
+	int blksperpage, bsize, error, i, numblks, pagecnt, size;
+	int curpage, fpage, npage;
+
+	bsize = vp->v_mount->mnt_stat.f_iosize;
+	filesize = vp->v_object->un_pager.vnp.vnp_size;
+	pages = ap->a_m;
+	pagecnt = btoc(ap->a_count);
+	blksperpage = PAGE_SIZE / bsize;
+
+	/* 
+	 * Free other pages, if requested page is partially valid.  UDF does not
+	 * partially fill pages.
+	 */
+	VM_OBJECT_LOCK(vp->v_object);
+	if (pages[ap->a_reqpage]->valid != 0) {
+		for (i = 0; i < pagecnt; i++)
+			if (i != ap->a_reqpage) {
+				vm_page_lock(pages[i]);
+				vm_page_free(pages[i]);
+				vm_page_unlock(pages[i]);
+			}
+		VM_OBJECT_UNLOCK(vp->v_object);
+		return VM_PAGER_OK;
+	}
+	VM_OBJECT_UNLOCK(vp->v_object);
+
+	/* Map all memory pages, and then use a single buf object for all 
+	bstrategy calls. */
+	bp = getpbuf(&udf_pbuf_freecnt);
+	bp->b_iocmd = BIO_READ;
+	bp->b_iodone = bdone;
+	bp->b_rcred = crhold(curthread->td_ucred);
+	bp->b_wcred = crhold(curthread->td_ucred);
+
+	curdata = kva = (vm_offset_t)bp->b_data;
+	pmap_qenter(kva, pages, pagecnt);
+
+	firstblk = pages[0]->pindex * blksperpage;
+	startreq = pages[ap->a_reqpage]->pindex * blksperpage;
+	lastreq = startreq + blksperpage - 1;
+	if ((lastreq + 1) * bsize > filesize)
+		lastreq = (filesize - 1) / bsize;
+	fpage = -1;
+
+	for (curpage = 0, vblock = firstblk; vblock <= lastreq; ) {
+		error = VOP_BMAP(vp, vblock, &bo, &address, &numblks, NULL);
+		if (error)
+			goto error;
+
+		numblks++;
+		if (vblock + numblks <= startreq) {
+			vblock += numblks - 1; /* last block of run */
+			npage = (vblock - firstblk) / blksperpage + 1;
+			vblock = pages[npage]->pindex * blksperpage; 
+			curdata = kva + IDX_TO_OFF(pages[npage]->pindex);
+			continue;
+		} 
+
+		curpage = ((vblock - firstblk) * bsize) / PAGE_SIZE;
+
+		/* find number of blocks to readahead */
+		numblks = MIN(numblks, 
+		    blksperpage * pagecnt - (vblock - firstblk));
+		if (vblock + numblks - 1 > lastreq)
+			numblks -= (vblock - firstblk + numblks) % blksperpage;
+		size = bsize * numblks;
+
+		/* from initpbuf() */
+		bp->b_qindex = 0;
+		bp->b_xflags = 0;
+		bp->b_flags = 0;
+		bp->b_ioflags = 0;
+		bp->b_iodone = NULL;
+		bp->b_error = 0;
+
+		/* setup the buffer for this run */
+		if (fpage == -1) {
+			pbgetbo(bo, bp);
+			bp->b_vp = vp;
+			fpage = curpage;
+		}
+
+		bp->b_data = (caddr_t)curdata;
+		bp->b_blkno = address;
+		bp->b_lblkno = vblock;
+		bp->b_bcount = size; /* this is the current read size. */
+		bp->b_bufsize = size;
+		bp->b_runningbufspace = bp->b_bufsize;
+		atomic_add_long(&runningbufspace, bp->b_runningbufspace);
+
+		bp->b_iooffset = dbtob(bp->b_blkno);
+		bstrategy(bp);
+
+		bwait(bp, PVM, "udfvnread");
+
+		if ((bp->b_ioflags & BIO_ERROR) != 0) {
+			error = EIO;
+			goto error;
+		}
+
+		vblock = vblock + numblks;
+		curdata += size;
+	}
+
+	/* it should error out before here if vblock == firstblk */
+	npage = (vblock - 1 - firstblk) / blksperpage + 1;
+
+	if ((vblock - firstblk) % blksperpage != 0) {
+		bzero((caddr_t) curdata, 
+		    ((vblock - firstblk) % blksperpage) * bsize);
+	}
+
+error:
+	pmap_qremove(kva, pagecnt);
+
+	bp->b_vp = NULL;
+	pbrelbo(bp);
+	relpbuf(bp, &vnode_pbuf_freecnt);
+
+	if (error != 0) {
+		VM_OBJECT_LOCK(vp->v_object);
+		for (i = 0; i < pagecnt; i++)
+			if (i != ap->a_reqpage) {
+				vm_page_lock(pages[i]);
+				vm_page_free(pages[i]);
+				vm_page_unlock(pages[i]);
+			}
+		VM_OBJECT_UNLOCK(vp->v_object);
+		return (VM_PAGER_ERROR);
+	}
+
+	VM_OBJECT_LOCK(vp->v_object);
+	/* remove all pages before first loaded page. */
+	for (i = 0; i < fpage; i++) {
+		vm_page_lock(pages[i]);
+		vm_page_free(pages[i]);
+		vm_page_unlock(pages[i]);
+	}
+
+	/* mark filled pages. */
+	foff = IDX_TO_OFF(pages[fpage]->pindex);
+	for (i = fpage, tfoff = foff; i < npage; i++, tfoff += PAGE_SIZE) {
+		/* We only read complete pages above. */
+		if (tfoff + PAGE_SIZE <= filesize)
+			pages[i]->valid = VM_PAGE_BITS_ALL;
+		else {
+#if __FreeBSD__ < 10
+			vm_page_set_valid(pages[i], 0, filesize - tfoff);
+#else
+			vm_page_set_valid_range(pages[i], 0, filesize - tfoff);
+#endif
+		}
+
+		if (i != ap->a_reqpage)
+			vm_page_readahead_finish(pages[i]);
+	}
+
+	/* remove all pages after last loaded page. */
+	for (i = npage; i < pagecnt; i++) {
+		vm_page_lock(pages[i]);
+		vm_page_free(pages[i]);
+		vm_page_unlock(pages[i]);
+	}
+	VM_OBJECT_UNLOCK(vp->v_object);
+
+	return (VM_PAGER_OK);
 }
 
