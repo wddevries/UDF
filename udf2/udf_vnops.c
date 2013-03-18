@@ -1107,6 +1107,7 @@ udf_getpages(struct vop_getpages_args /* {
 	int blksperpage, bsize, error, i, numblks, pagecnt, size;
 	int curpage, fpage, npage;
 
+	error = 0;
 	bsize = vp->v_mount->mnt_stat.f_iosize;
 	filesize = vp->v_object->un_pager.vnp.vnp_size;
 	pages = ap->a_m;
