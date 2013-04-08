@@ -215,6 +215,7 @@ udf_fidsize(struct fileid_desc *fid)
 	size = UDF_FID_SIZE + fid->l_fi + le16toh(fid->l_iu);
 	size = (size + 3) & ~3;
 
+	/* We know this value will fit in an int. */
 	return (size);
 }
 
@@ -1399,8 +1400,9 @@ udf_read_rootdirs(struct udf_mount *ump)
 		vput(streamdir_node);
 	}
 	if (rootdir_node != NULL) {
-		if (error != 0)
-			vgone(rootdir_node);
+		/* Vnodes are not initialized correctly until mounting is
+		complete. */
+		vgone(rootdir_node);
 		vput(rootdir_node);
 	}
 
@@ -1850,51 +1852,13 @@ udf_dispose_node(struct udf_node *udf_node)
  */
 
 int
-udf_read_fid_stream(struct vnode *vp, uint64_t *offset,
-		struct fileid_desc *fid)
+udf_validate_fid(struct fileid_desc *fid, int *realsize)
 {
-	struct udf_node *dir_node = VTOI(vp);
-	struct udf_mount *ump = dir_node->ump;
-	struct file_entry *fe = dir_node->fe;
-	struct extfile_entry *efe = dir_node->efe;
-	uint64_t file_size;
-	int error;
-	uint32_t fid_size, lb_size;
-
-	/* check if we're past the end of the directory */
-	if (fe != NULL)
-		file_size = le64toh(fe->inf_len);
-	else 
-		file_size = le64toh(efe->inf_len);
-
-	if (*offset >= file_size)
-		return (EINVAL);
-
-	/* get maximum length of FID descriptor */
-	lb_size = le32toh(ump->logical_vol->lb_size);
-
-	/* initialise return values */
-	fid_size = 0;
-	memset(fid, 0, lb_size);
-
-	if (file_size - *offset < UDF_FID_SIZE)
-		return (EIO); /* short dir ... */
-
-	error = udf_read_node(dir_node, (uint8_t *)fid, *offset, 
-	    MIN(file_size - (*offset), lb_size));
-	if (error != 0)
-		return (error);
-
-	/*
-	 * Check if we got a whole descriptor.
-	 * TODO Try to `resync' directory stream when something is very wrong.
-	 */
+	int error, fid_size;
 
 	/* check if our FID header is OK */
-	error = udf_check_tag(fid);
-	if (error != 0) {
+	if ((error = udf_check_tag(fid)) != 0)
 		goto brokendir;
-	}
 
 	if (le16toh(fid->tag.id) != TAGID_FID) {
 		error = EIO;
@@ -1903,23 +1867,18 @@ udf_read_fid_stream(struct vnode *vp, uint64_t *offset,
 
 	/* check for length */
 	fid_size = udf_fidsize(fid);
-	if (file_size - (*offset) < fid_size) {
+	if (*realsize < fid_size) {
 		error = EIO;
 		goto brokendir;
 	}
 
 	/* check FID contents */
-	error = udf_check_tag_payload((union dscrptr *)fid, lb_size);
-brokendir:
-	if (error != 0) {
-		/* note that is sometimes a bit quick to report */
-		/* RESYNC? */
-		/* TODO: use udf_resync_fid_stream */
-		return (EIO);
-	}
+	error = udf_check_tag_payload((union dscrptr *)fid, *realsize);
 
-	/* advance */
-	*offset += fid_size;
+	*realsize = fid_size;
+brokendir:
+	if (error != 0)
+		return (EIO);
 
 	return (error);
 }

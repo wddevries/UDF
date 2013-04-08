@@ -178,7 +178,7 @@ udf_read(struct vop_read_args *ap)
 		if ((vp->v_mount->mnt_flag & MNT_NOCLUSTERR) == 0 &&
 		    sector_size * (lbn + 1) < fsize) {
 			error = cluster_read(vp, fsize, lbn, sector_size, 
-			    NOCRED, uio->uio_resid, seqcount, &bp);
+			    NOCRED, on + uio->uio_resid, seqcount, &bp);
 		} else {
 			error = bread(vp, lbn, sector_size, NOCRED, &bp);
 		}
@@ -317,14 +317,14 @@ udf_readdir(struct vop_readdir_args *ap)
 {
 	struct uio *uio;
 	struct vnode *vp;
-	struct file_entry *fe;
-	struct extfile_entry *efe;
 	struct fileid_desc *fid;
 	struct dirent *dirent;
 	struct udf_mount *ump;
 	struct udf_node *udf_node;
-	uint64_t *cookies, *cookiesp, diroffset, file_size, transoffset;
-	int acookies, error, ncookies;
+	uint64_t file_size;
+	u_long *cookies, *cookiesp;
+	off_t diroffset, transoffset;
+	int acookies, error, ncookies, size;
 	uint32_t lb_size;
 	uint8_t *fid_name;
 	
@@ -340,22 +340,19 @@ udf_readdir(struct vop_readdir_args *ap)
 		return (ENOTDIR);
 
 	/* get directory filesize */
-	if (udf_node->fe != NULL) {
-		fe = udf_node->fe;
-		file_size = le64toh(fe->inf_len);
-	} else {
-		efe = udf_node->efe;
-		file_size = le64toh(efe->inf_len);
-	}
+	if (udf_node->fe != NULL)
+		file_size = le64toh(udf_node->fe->inf_len);
+	else
+		file_size = le64toh(udf_node->efe->inf_len);
 
 	dirent = malloc(sizeof(struct dirent), M_UDFTEMP, M_WAITOK | M_ZERO);
 	if (ap->a_ncookies != NULL) {
 		/* is this the max number possible? */
 		ncookies = uio->uio_resid / 8;
+		if (ncookies > 1024)
+			ncookies = 1024;
 		cookies = malloc(sizeof(u_long) * ncookies, M_TEMP, 
 		    M_WAITOK | M_ZERO);
-		if (cookies == NULL)
-			return (ENOMEM);
 		cookiesp = cookies;
 	} else {
 		ncookies = 0;
@@ -373,98 +370,113 @@ udf_readdir(struct vop_readdir_args *ap)
 		dirent->d_name[1] = '\0';
 		dirent->d_namlen = 1;
 		dirent->d_reclen = GENERIC_DIRSIZ(dirent);
-		if (cookiesp != NULL) {
-			acookies++;
-			*cookiesp++ = 1; // next one
-		}
-		error = uiomove(dirent, GENERIC_DIRSIZ(dirent), uio);
-		if (error != 0)
-			goto bail;
 
-		/* in case the directory size is 0 or 1? */
-		transoffset = 1;
+		if (uio->uio_resid >= dirent->d_reclen)
+		{
+			if (cookiesp != NULL) {
+				acookies++;
+				*cookiesp++ = 1; // next one
+			}
+			error = uiomove(dirent, dirent->d_reclen, uio);
+			if (error != 0)
+				goto bail;
+
+			transoffset = 1;
+		}
 	}
+
+	/* allocate temporary space for fid */
+	lb_size = ump->sector_size;
+	fid = malloc(lb_size, M_UDFTEMP, M_WAITOK);
 
 	/* we are called just as long as we keep on pushing data in */
-	if (transoffset < file_size) {
-		/* allocate temporary space for fid */
-		lb_size = le32toh(udf_node->ump->logical_vol->lb_size);
-		fid = malloc(lb_size, M_UDFTEMP, M_WAITOK);
+	if (transoffset == 1)
+		diroffset = 0;
+	else
+		diroffset = transoffset;
 
-		if (transoffset == 1)
-			diroffset = 0;
-		else
-			diroffset = transoffset;
+	while (diroffset < file_size) {
+		/* transfer a new fid/dirent */
+		memset(fid, 0, lb_size);
+		size = MIN(file_size - diroffset, lb_size);
 
-		while (diroffset < file_size) {
-			/* transfer a new fid/dirent */
-			error = udf_read_fid_stream(vp, &diroffset, fid);
-			if (error != 0) {
-				printf("UDF: Read error in read fid: %d\n", error);
-				break;
-			}
-			
-			/* create resulting dirent structure */
-			memset(dirent, 0, sizeof(struct dirent));
-			error = udf_get_node_id(fid->icb, &dirent->d_fileno); /* inode hash XXX */
-			if (error != 0)
-				break;
-
-			/* Going for the filetypes now is too expensive. */
-			dirent->d_type = DT_UNKNOWN;
-			if (fid->file_char & UDF_FILE_CHAR_DIR)
-				dirent->d_type = DT_DIR;
-
-			/* '..' has no name, so provide one */
-			if (fid->file_char & UDF_FILE_CHAR_PAR) {
-				dirent->d_name[0] = '.';
-				dirent->d_name[1] = '.';
-				dirent->d_name[2] = '\0';
-				dirent->d_namlen = 2;
-			} else {
-				fid_name = fid->data + le16toh(fid->l_iu);
-				udf_to_unix_name(ump, dirent->d_name, MAXNAMLEN,
-				    fid_name, fid->l_fi);
-				dirent->d_namlen = strlen(dirent->d_name);
-			}
-			dirent->d_reclen = GENERIC_DIRSIZ(dirent);
-
-			/* 
-			 * If there isn't enough space in the uio to return a
-			 * whole dirent, break off read
-			 */
-			if (uio->uio_resid < GENERIC_DIRSIZ(dirent))
-				break;
-
-			/* skip deleted and not visible files */
-			if (fid->file_char & UDF_FILE_CHAR_DEL ||
-			    fid->file_char & UDF_FILE_CHAR_VIS) {
-				transoffset = diroffset;
-				if (cookiesp != NULL && acookies > 0)
-					*(cookiesp - 1) = transoffset;
-				continue;
-			}
-
-			/* copy dirent to the caller */
-			if (cookiesp != NULL) {
-				if (acookies + 1 > ncookies)
-					break; 
-				acookies++;
-				*cookiesp++ = diroffset;
-			}
-
-			/* remember the last entry we transfered */
-			transoffset = diroffset;
-
-			error = uiomove(dirent, GENERIC_DIRSIZ(dirent), uio);
-			if (error != 0)
-				break;
+		error = vn_rdwr(UIO_READ, vp, fid, size, diroffset, 
+		    UIO_SYSSPACE, IO_NODELOCKED, FSCRED, NULL, NULL, 
+		    curthread);
+		if (error != 0) {
+			printf("UDF: Error reading fid: %d\n", error);
+			break;
 		}
 
-		/* pass on last transfered offset */
-		/* We lied for '.', so tell more lies. */
-		free(fid, M_UDFTEMP);
+		error = udf_validate_fid(fid, &size);
+		if (error != 0) {
+			printf("UDF: Invalid fid found: %d\n", error);
+			break;
+		}
+
+		diroffset += size;
+		
+		/* skip deleted and not visible files */
+		if (fid->file_char & UDF_FILE_CHAR_DEL ||
+		    fid->file_char & UDF_FILE_CHAR_VIS) {
+			transoffset = diroffset;
+			if (cookiesp != NULL && acookies > 0)
+				*(cookiesp - 1) = transoffset;
+			continue;
+		}
+
+		/* create resulting dirent structure */
+		memset(dirent, 0, sizeof(struct dirent));
+		error = udf_get_node_id(fid->icb, &dirent->d_fileno); /* inode hash XXX */
+		if (error != 0)
+			break;
+
+		/* Going for the filetypes now is too expensive. */
+		dirent->d_type = DT_UNKNOWN;
+		if (fid->file_char & UDF_FILE_CHAR_DIR)
+			dirent->d_type = DT_DIR;
+
+		/* '..' has no name, so provide one */
+		if (fid->file_char & UDF_FILE_CHAR_PAR) {
+			dirent->d_name[0] = '.';
+			dirent->d_name[1] = '.';
+			dirent->d_name[2] = '\0';
+			dirent->d_namlen = 2;
+		} else {
+			fid_name = fid->data + le16toh(fid->l_iu);
+			udf_to_unix_name(ump, dirent->d_name, MAXNAMLEN,
+			    fid_name, fid->l_fi);
+			dirent->d_namlen = strlen(dirent->d_name);
+		}
+
+		dirent->d_reclen = GENERIC_DIRSIZ(dirent);
+
+		/* 
+		 * If there isn't enough space in the uio to return a
+		 * whole dirent, break off read
+		 */
+		if (uio->uio_resid < dirent->d_reclen)
+			break;
+
+		/* copy dirent to the caller */
+		if (cookiesp != NULL) {
+			if (acookies + 1 > ncookies)
+				break; 
+			acookies++;
+			*cookiesp++ = diroffset;
+		}
+
+		/* remember the last entry we transfered */
+		transoffset = diroffset;
+
+		error = uiomove(dirent, dirent->d_reclen, uio);
+		if (error != 0)
+			break;
 	}
+
+	/* pass on last transfered offset */
+	/* We lied for '.', so tell more lies. */
+	free(fid, M_UDFTEMP);
 
 	uio->uio_offset = transoffset; 
 
@@ -498,6 +510,7 @@ udf_cachedlookup(struct vop_cachedlookup_args *ap)
 	uint64_t file_size, offset;
 	ino_t id = 0;
 	int error, islastcn, ltype, mounted_ro, nameiop, numpasses, unix_len;
+	int size;
 	uint8_t *fid_name;
 	char *unix_name;
 
@@ -524,9 +537,6 @@ udf_cachedlookup(struct vop_cachedlookup_args *ap)
 	else
 		file_size = le64toh(dir_node->efe->inf_len);
 
-	/* 
-	 * 
-	 */
 	if (nameiop != LOOKUP || dir_node->diroff == 0 || 
 	    dir_node->diroff > file_size) {
 		offset = 0;
@@ -542,10 +552,24 @@ udf_cachedlookup(struct vop_cachedlookup_args *ap)
 	unix_name = malloc(MAXNAMLEN, M_UDFTEMP, M_WAITOK);
 lookuploop:
 	while (offset < file_size) {
-		error = udf_read_fid_stream(dvp, &offset, fid);
+		/* transfer a new fid/dirent */
+		memset(fid, 0, ump->sector_size);
+		size = MIN(file_size - offset, ump->sector_size);
+
+		error = vn_rdwr(UIO_READ, dvp, fid, size, offset, UIO_SYSSPACE,
+		    IO_NODELOCKED, FSCRED, NULL, NULL, curthread);
 		if (error != 0) {
+			printf("UDF: Error reading fid: %d\n", error);
 			break;
 		}
+
+		error = udf_validate_fid(fid, &size);
+		if (error != 0) {
+			printf("UDF: Invalid fid found: %d\n", error);
+			break;
+		}
+
+		offset += size;
 
 		/* skip deleted entries */
 		if (fid->file_char & UDF_FILE_CHAR_DEL)

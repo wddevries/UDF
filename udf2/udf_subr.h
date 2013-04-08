@@ -96,8 +96,7 @@ void	udf_read_filebuf(struct udf_node *node, struct buf *buf);
 
 /* directory operations and helpers */
 void	udf_osta_charset(struct charspec *charspec);
-int	udf_read_fid_stream(struct vnode *vp, uint64_t *offset,
-	    struct fileid_desc *fid);
+int	udf_validate_fid(struct fileid_desc *fid, int *realsize);
 int	udf_lookup_name_in_dir(struct vnode *vp, const char *name, int namelen,
 	    struct long_ad *icb_loc, int *found);
 
