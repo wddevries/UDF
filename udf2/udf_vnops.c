@@ -1143,7 +1143,7 @@ udf_getpages(struct vop_getpages_args /* {
 	 * partially fill pages.
 	 */
 	VM_OBJECT_LOCK(vp->v_object);
-	if (pages[ap->a_reqpage]->valid != 0) {
+	if (pages[ap->a_reqpage]->valid == VM_PAGE_BITS_ALL) {
 		for (i = 0; i < pagecnt; i++)
 			if (i != ap->a_reqpage) {
 				vm_page_lock(pages[i]);
