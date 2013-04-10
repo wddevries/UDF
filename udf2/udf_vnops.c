@@ -1139,8 +1139,9 @@ udf_getpages(struct vop_getpages_args /* {
 	blksperpage = PAGE_SIZE / bsize;
 
 	/* 
-	 * Free other pages, if requested page is partially valid.  UDF does not
-	 * partially fill pages.
+	 * Free other pages, if requested page is valid.  If only part of a page
+	 * is marked as valid, we overwrite it below.  This approch would not 
+	 * work, if the filesystem implemented write support.
 	 */
 	VM_OBJECT_LOCK(vp->v_object);
 	if (pages[ap->a_reqpage]->valid == VM_PAGE_BITS_ALL) {
