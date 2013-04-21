@@ -737,11 +737,10 @@ udf_getattr(struct vop_getattr_args *ap)
 	vattr_null(vap);
 	vap->va_type = vp->v_type;
 	vap->va_mode = udf_getaccessmode(udf_node);
-	if (vap->va_type == VDIR && ump->flags & UDFMNT_USE_DIRMASK) {
+	if (vap->va_type == VDIR && ump->flags & UDFMNT_USE_DIRMASK)
 		vap->va_mode = (vap->va_mode & ~ALLPERMS) | ump->dirmode;
-	} else if (ump->flags & UDFMNT_USE_MASK) {
+	else if (vap->va_type != VDIR && ump->flags & UDFMNT_USE_MASK)
 		vap->va_mode = (vap->va_mode & ~ALLPERMS) | ump->mode;
-	}
 	vap->va_nlink = nlink;
 	vap->va_uid = uid;
 	vap->va_gid = gid;
@@ -876,6 +875,7 @@ udf_access(struct vop_access_args *ap)
 {
 	struct vnode *vp;
 	struct udf_node *udf_node;
+	struct udf_mount *ump;
 	accmode_t accmode;
 	gid_t gid;
 	mode_t mode;
@@ -884,6 +884,7 @@ udf_access(struct vop_access_args *ap)
 	vp = ap->a_vp;
 	udf_node = VTOI(vp);
 	accmode = ap->a_accmode;
+	ump = udf_node->ump;
  
 	/* check if we are allowed to write */
 	switch (vp->v_type) {
@@ -912,11 +913,10 @@ udf_access(struct vop_access_args *ap)
 	}
 
 	mode = udf_getaccessmode(udf_node);
-	if (vp->v_type == VDIR && udf_node->ump->flags & UDFMNT_USE_DIRMASK) {
-		mode = (mode & ~ALLPERMS) | udf_node->ump->dirmode;
-	} else if (udf_node->ump->flags & UDFMNT_USE_MASK) {
-		mode = (mode & ~ALLPERMS) | udf_node->ump->mode;
-	}
+	if (vp->v_type == VDIR && ump->flags & UDFMNT_USE_DIRMASK)
+		mode = (mode & ~ALLPERMS) | ump->dirmode;
+	else if (vp->v_type != VDIR && ump->flags & UDFMNT_USE_MASK)
+		mode = (mode & ~ALLPERMS) | ump->mode;
 
 	if (udf_node->fe != NULL) {
 		uid = udf_node->fe->uid;

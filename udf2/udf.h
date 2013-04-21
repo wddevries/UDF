@@ -73,11 +73,11 @@
 #define UDF_REMAP_BLOCK		  0x02	/* remap the failing block length    */
 
 /* mounting options */
-#define UDFMNT_KICONV 		0x1
-#define UDFMNT_OVERRIDE_UID	0x2
-#define UDFMNT_OVERRIDE_GID	0x4
-#define UDFMNT_USE_MASK		0x8
-#define UDFMNT_USE_DIRMASK	0x16
+#define UDFMNT_KICONV 		1
+#define UDFMNT_OVERRIDE_UID	2
+#define UDFMNT_OVERRIDE_GID	4
+#define UDFMNT_USE_MASK		8
+#define UDFMNT_USE_DIRMASK	16
 
 /* malloc pools */
 MALLOC_DECLARE(M_UDFTEMP);

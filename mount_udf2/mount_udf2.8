@@ -74,17 +74,15 @@ If this option is specified, the
 .Fl G
 option has no effect.
 .It Fl M Ar permissions
-Set the absolute mode used for all directories in the file system to 
+Set the mode used for all directories in the file system to 
 .Ar permissions .
 This value should be specified as an octal number according to the rules in 
 chmod(1).
 .It Fl m Ar permissions
-Set the absolute mode used for all files in the file system to 
+Set the mode used for all files in the file system to 
 .Ar permissions .
-If the
-.Fl M
-option is not specified, all directories will also set to this value. This value
-should be specified as an octal number according to the rules in chmod(1).
+This value should be specified as an octal number according to the rules in 
+chmod(1).
 .It Fl o
 Options are specified with a
 .Fl o
