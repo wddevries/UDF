@@ -42,6 +42,7 @@
 #include <sys/unistd.h>
 #include <sys/bio.h>
 #include <sys/stat.h>
+#include <sys/rwlock.h>
 
 #include <vm/vm.h>
 #include <vm/vm_page.h>
@@ -177,8 +178,13 @@ udf_read(struct vop_read_args *ap)
 
 		if ((vp->v_mount->mnt_flag & MNT_NOCLUSTERR) == 0 &&
 		    sector_size * (lbn + 1) < fsize) {
+#if __FreeBSD__ < 10
 			error = cluster_read(vp, fsize, lbn, sector_size, 
 			    NOCRED, on + uio->uio_resid, seqcount, &bp);
+#else
+			error = cluster_read(vp, fsize, lbn, sector_size, 
+			    NOCRED, on + uio->uio_resid, seqcount, 0, &bp);
+#endif
 		} else {
 			error = bread(vp, lbn, sector_size, NOCRED, &bp);
 		}
@@ -1143,7 +1149,11 @@ udf_getpages(struct vop_getpages_args /* {
 	 * is marked as valid, we overwrite it below.  This approch would not 
 	 * work, if the filesystem implemented write support.
 	 */
+#if __FreeBSD__ < 10
 	VM_OBJECT_LOCK(vp->v_object);
+#else
+	VM_OBJECT_WLOCK(vp->v_object);
+#endif
 	if (pages[ap->a_reqpage]->valid == VM_PAGE_BITS_ALL) {
 		for (i = 0; i < pagecnt; i++)
 			if (i != ap->a_reqpage) {
@@ -1151,10 +1161,18 @@ udf_getpages(struct vop_getpages_args /* {
 				vm_page_free(pages[i]);
 				vm_page_unlock(pages[i]);
 			}
+#if __FreeBSD__ < 10
 		VM_OBJECT_UNLOCK(vp->v_object);
+#else
+		VM_OBJECT_WUNLOCK(vp->v_object);
+#endif
 		return VM_PAGER_OK;
 	}
+#if __FreeBSD__ < 10
 	VM_OBJECT_UNLOCK(vp->v_object);
+#else
+	VM_OBJECT_WUNLOCK(vp->v_object);
+#endif
 
 	/* Map all memory pages, and then use a single buf object for all 
 	bstrategy calls. */
@@ -1250,18 +1268,30 @@ error:
 	relpbuf(bp, &vnode_pbuf_freecnt);
 
 	if (error != 0) {
+#if __FreeBSD__ < 10
 		VM_OBJECT_LOCK(vp->v_object);
+#else
+		VM_OBJECT_WLOCK(vp->v_object);
+#endif
 		for (i = 0; i < pagecnt; i++)
 			if (i != ap->a_reqpage) {
 				vm_page_lock(pages[i]);
 				vm_page_free(pages[i]);
 				vm_page_unlock(pages[i]);
 			}
+#if __FreeBSD__ < 10
 		VM_OBJECT_UNLOCK(vp->v_object);
+#else
+		VM_OBJECT_WUNLOCK(vp->v_object);
+#endif
 		return (VM_PAGER_ERROR);
 	}
 
+#if __FreeBSD__ < 10
 	VM_OBJECT_LOCK(vp->v_object);
+#else
+	VM_OBJECT_WLOCK(vp->v_object);
+#endif
 	/* remove all pages before first loaded page. */
 	for (i = 0; i < fpage; i++) {
 		vm_page_lock(pages[i]);
@@ -1293,7 +1323,11 @@ error:
 		vm_page_free(pages[i]);
 		vm_page_unlock(pages[i]);
 	}
+#if __FreeBSD__ < 10
 	VM_OBJECT_UNLOCK(vp->v_object);
+#else
+	VM_OBJECT_WUNLOCK(vp->v_object);
+#endif
 
 	return (VM_PAGER_OK);
 }
