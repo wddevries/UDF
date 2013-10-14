@@ -955,12 +955,15 @@ udf_readlink(struct vop_readlink_args *ap)
 	else
 		filelen = le64toh(udf_node->fe->inf_len);
 
+	if (UDF_SYMLINKBUFLEN - 1 < filelen)
+		return (EINVAL);
+
 	/* claim temporary buffers for translation */
 	pathbuf = malloc(UDF_SYMLINKBUFLEN, M_UDFTEMP, M_WAITOK);
 	targetbuf = malloc(PATH_MAX + 1, M_UDFTEMP, M_WAITOK);
 	tmpname = malloc(PATH_MAX + 1, M_UDFTEMP, M_WAITOK);
 	memset(pathbuf, 0, UDF_SYMLINKBUFLEN);
-	memset(targetbuf, 0, PATH_MAX);
+	memset(targetbuf, 0, PATH_MAX + 1);
 
 	/* read contents of file in our temporary buffer */
 	error = vn_rdwr(UIO_READ, vp, pathbuf, filelen, 0, UIO_SYSSPACE,

@@ -100,6 +100,7 @@ udf_check_tag_payload(void *blob, uint32_t max_length)
 	return (0);
 }
 
+#if 0
 void
 udf_validate_tag_sum(void *blob)
 {
@@ -136,6 +137,7 @@ udf_validate_tag_and_crc_sums(void *blob)
 	/* calculate TAG header checksum */
 	udf_validate_tag_sum(blob);
 }
+#endif
 
 /*
  * XXX note the different semantics from udfclient: for FIDs it still rounds
@@ -390,7 +392,7 @@ udf_read_vds_extent(struct udf_mount *ump, uint32_t loc, uint32_t len)
 
 	/* loc is sectornr, len is in bytes */
 	error = EIO;
-	while (len) {
+	while (len > 0) {
 		error = udf_read_phys_dscr(ump, loc, M_UDFTEMP, &dscr);
 		if (error != 0) {
 			if (!dscr)
@@ -474,8 +476,9 @@ udf_read_vds_space(struct udf_mount *ump)
  * history keeping and on non sequential write-once media the chain is vital
  * to allow more and more descriptors to be written. The last descriptor
  * written in an extent needs to claim space for a new extent.
+ *
+ * Note: this may not return in the media is malformed.
  */
-
 static int
 udf_retrieve_lvint(struct udf_mount *ump)
 {
@@ -491,7 +494,7 @@ udf_retrieve_lvint(struct udf_mount *ump)
 	lvint = NULL;
 	dscr = NULL;
 	error = 0;
-	while (len) {
+	while (len > 0) {
 		/* read in our integrity descriptor */
 		error = udf_read_phys_dscr(ump, lbnum, M_UDFTEMP, &dscr);
 		if (error == 0) {
